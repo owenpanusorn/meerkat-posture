@@ -249,7 +249,10 @@ meerkat-posture/
 - [ ] หน้าตั้งค่าแบบ GUI (พิจารณา PySide6)
 - [x] เริ่มอัตโนมัติตอนเปิดเครื่อง (ตัวเลือก)
 - [ ] แพ็กด้วย PyInstaller: Windows `.exe` ✅, macOS `.app`
-- [ ] GitHub Actions: lint + test + build
+- [x] GitHub Actions: lint + test + build (`release.yml`: tag `v*` → GitHub Release `.zip`)
+- [x] ติดตั้งด้วยคำสั่งเดียว: `install.ps1` / `uninstall.ps1` (`irm ... | iex`, per-user, ตรวจ SHA-256)
+- [ ] เปิด repo เป็น public (ตอนนี้ private: ติดตั้งผ่านคำสั่งได้เมื่อเปิดแล้ว)
+- [ ] (ภายหลัง) ส่งเข้า winget
 - [ ] เช็กชื่อ `meerkat-posture` บน GitHub / PyPI ก่อน publish
 
 ---

@@ -23,6 +23,30 @@ Meerkat looks at you all day, so these rules are fixed in the code:
 6. **The camera image is shown only when you ask for it** (tray menu "debug window", or
    `--debug`).
 
+## Install (Windows)
+
+Open PowerShell and run:
+
+```powershell
+irm https://raw.githubusercontent.com/owenpanusorn/meerkat-posture/main/install.ps1 | iex
+```
+
+This downloads the latest [release](https://github.com/owenpanusorn/meerkat-posture/releases),
+checks its SHA-256, installs it to `%LOCALAPPDATA%\Programs\Meerkat` (no admin rights, no Python
+needed), adds a Start Menu shortcut and starts it. Run the same line again to update. Read
+[install.ps1](install.ps1) first if you like; it is short. The installer is the only part that
+downloads anything; Meerkat itself never goes online.
+
+To uninstall (your settings and stats are kept unless you set `$env:MEERKAT_PURGE = "1"` first):
+
+```powershell
+irm https://raw.githubusercontent.com/owenpanusorn/meerkat-posture/main/uninstall.ps1 | iex
+```
+
+Or download `Meerkat-windows-x64.zip` from the releases page, unzip it anywhere and run
+`Meerkat.exe`. The exe is not code-signed, so Windows SmartScreen may warn the first time:
+"More info" → "Run anyway".
+
 ## What it checks
 
 | Check | Default alert |
@@ -58,7 +82,7 @@ seconds (calibration). After that it lives in the system tray:
 
 Ctrl+C in the terminal also quits. Only one copy runs at a time.
 
-## Windows app (.exe)
+## Building the Windows app yourself
 
 Build a folder with `Meerkat.exe` (no Python needed to run it, no terminal window):
 
@@ -72,8 +96,7 @@ Move the whole folder wherever you like and run `Meerkat.exe`. Then tick
 **"เปิดอัตโนมัติตอนเข้า Windows"** in the tray menu to start it at sign-in (per-user, no admin).
 If you move the folder later, toggle that option off and on again.
 
-The exe is not code-signed, so Windows SmartScreen may warn the first time:
-"More info" → "Run anyway". Logs go to `meerkat.log` in the data folder (tray menu
+Logs go to `meerkat.log` in the data folder (tray menu
 "เปิดโฟลเดอร์ข้อมูล / log"). `Meerkat.exe --selftest` checks that models, icons and sounds
 load, without using the camera.
 
@@ -125,6 +148,19 @@ uv run python -m meerkat --debug          # camera window only, shows the raw nu
 uv run python scripts/make_icons.py       # regenerate tray icons
 uv run python scripts/make_sounds.py      # regenerate alert sounds
 ```
+
+### Releasing
+
+Bump `version` in `pyproject.toml` and `__version__` in `src/meerkat/__init__.py`, commit,
+then push a matching tag:
+
+```sh
+git tag v0.1.0 && git push origin v0.1.0
+```
+
+The [Release workflow](.github/workflows/release.yml) tests, builds `Meerkat.exe`, runs its
+self-test and publishes `Meerkat-windows-x64.zip` (+ `.sha256`) as a GitHub Release, which
+`install.ps1` picks up.
 
 The posture logic (`metrics.py`, `rules.py`, `sitting.py`) is pure functions and is tested
 with made-up numbers, no camera needed. See [PLAN.md](PLAN.md) for the roadmap.
