@@ -22,7 +22,7 @@ from pathlib import Path
 
 import numpy as np
 
-from meerkat import calibration, config, storage
+from meerkat import calibration, config, notifier, storage
 from meerkat.camera import Camera, CameraError
 from meerkat.debug_view import DebugWindow
 from meerkat.detector import Detector
@@ -79,6 +79,7 @@ class App:
         self.debug_enabled = False
         self.recording = False
         self._pause_until: float | None = None
+        self._phone_until: float | None = None
         self._cal: _Calibration | None = None
         self._status = "กำลังเปิดกล้อง..."
         self._stats_lines: list[str] = ["ยังไม่มีข้อมูล"]
@@ -166,6 +167,19 @@ class App:
     def toggle_recording(self) -> None:
         self._cmds.put(("recording",))
 
+    @property
+    def phone_break_active(self) -> bool:
+        return self._phone_until is not None
+
+    def phone_break_options(self) -> list[int]:
+        return list(self.cfg.alerts.phone_break_options_min)
+
+    def start_phone_break(self, minutes: int) -> None:
+        self._cmds.put(("phone_break", minutes))
+
+    def end_phone_break(self) -> None:
+        self._cmds.put(("phone_break_end",))
+
     def toggle_debug(self) -> None:
         self.debug_enabled = not self.debug_enabled
 
@@ -247,6 +261,9 @@ class App:
 
                 if self._pause_until is not None and now >= self._pause_until:
                     self._resume()
+
+                if self._phone_until is not None and now >= self._phone_until:
+                    self._finish_phone_break(timed_out=True)
 
                 if self.paused or not self.debug_enabled:
                     window.close()
@@ -377,6 +394,8 @@ class App:
                 self.paused = True
                 self._pause_until = None if minutes is None else now + minutes * 60
                 self._cal = None
+                self._phone_until = None
+                self.rules.unmute()
                 self.rules.reset()
                 self.sitting.reset()
                 self.smoother.reset()
@@ -418,6 +437,25 @@ class App:
                 else:
                     self._stop_recording()
                 self.tray.refresh()
+            elif cmd == "phone_break":
+                (minutes,) = args
+                self._phone_until = now + minutes * 60
+                self.rules.mute(self._phone_until)
+                self._event("phone_break", str(minutes))
+                self.notifier.send(*notifier.phone_break_started(minutes))
+                self.tray.refresh()
+            elif cmd == "phone_break_end":
+                self._finish_phone_break(timed_out=False)
+
+    def _finish_phone_break(self, timed_out: bool) -> None:
+        if self._phone_until is None:
+            return
+        self._phone_until = None
+        self.rules.unmute()
+        self._event("phone_break_end", "timeout" if timed_out else "manual")
+        if timed_out:
+            self.notifier.send(*notifier.phone_break_over(), sound=notifier.POSTURE)
+        self.tray.refresh()
 
     def _resume(self) -> None:
         if self.paused:
@@ -584,6 +622,9 @@ class App:
         if not m.person_present:
             return "ไม่เห็นใครหน้าจอ"
         text = f"นั่งมาแล้ว {minutes} นาที"
+        if self._phone_until is not None:
+            left = max(1, round((self._phone_until - now) / 60))
+            text += f" (พักเล่นโทรศัพท์ อีก {left} นาที)"
         if self.sitting.snoozed(now):
             text += " (เลื่อนเตือนลุกอยู่)"
         return text

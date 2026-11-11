@@ -118,6 +118,7 @@ class DayStats:
     sitting_s: float = 0.0
     stand_ups: int = 0
     break_reminders: int = 0
+    phone_breaks: int = 0
     alerts: dict[str, int] = field(default_factory=dict)
     zone_share: dict[str, float] = field(default_factory=dict)
 
@@ -131,6 +132,7 @@ RULE_LABELS = {
     "shoulder_tilt": "ไหล่เอียง",
     "twist": "ตัวบิด",
     "slouch": "ค่อม",
+    "phone": "เล่นโทรศัพท์",
 }
 ZONE_LABELS = {"main": "จอหลัก", "second": "จอที่สอง"}
 
@@ -139,6 +141,8 @@ def format_stats(s: DayStats) -> list[str]:
     h, m = divmod(int(s.sitting_s // 60), 60)
     lines = [f"นั่งรวม {h} ชม. {m} นาที" if h else f"นั่งรวม {m} นาที"]
     lines.append(f"ลุก {s.stand_ups} ครั้ง, เตือนลุก {s.break_reminders} ครั้ง")
+    if s.phone_breaks:
+        lines.append(f"พักเล่นโทรศัพท์ {s.phone_breaks} ครั้ง")
     total = sum(s.alerts.values())
     if total:
         parts = [f"{RULE_LABELS.get(r, r)} {n}" for r, n in sorted(s.alerts.items(), key=_desc)]
@@ -218,6 +222,7 @@ class Storage:
             sitting_s=float(sitting),
             stand_ups=counts.get("stood_up", 0),
             break_reminders=counts.get("break_reminder", 0),
+            phone_breaks=counts.get("phone_break", 0),
             alerts=alerts,
             zone_share=self.zone_share(start, end),
         )

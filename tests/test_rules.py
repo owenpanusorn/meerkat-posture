@@ -133,8 +133,9 @@ FACE_LOST_BODY_SEEN = PostureMetrics(
 
 def test_head_bowed_until_face_is_lost_still_alerts():
     # Real case: head goes down, then the face disappears but the shoulders stay in view.
+    # Reported as "phone" because the face got lost while bowed (see phone tests below).
     sim = Sim().hold(GOOD, 5).hold(HEAD_DOWN, 10).hold(FACE_LOST_BODY_SEEN, 25)
-    assert sim.names() == ["head_down"]
+    assert len(sim.names()) == 1
 
 
 def test_face_and_body_gone_resets():
@@ -151,6 +152,56 @@ def test_face_lost_hold_expires():
 def test_face_lost_without_any_face_first_is_ok():
     sim = Sim().hold(FACE_LOST_BODY_SEEN, 120)
     assert sim.names() == []
+
+
+PHONE_DOWN = replace(BASE, head_pitch=-35.0)  # 30 deg below baseline
+
+
+def test_deep_head_down_is_reported_as_phone():
+    sim = Sim().hold(GOOD, 5).hold(PHONE_DOWN, 31)
+    assert sim.names() == ["phone"]
+
+
+def test_moderate_head_down_stays_head_down():
+    sim = Sim().hold(GOOD, 5).hold(HEAD_DOWN, 31)  # 20 deg: e.g. keyboard / notes
+    assert sim.names() == ["head_down"]
+
+
+def test_bowed_until_face_lost_is_phone():
+    sim = Sim().hold(GOOD, 5).hold(HEAD_DOWN, 10).hold(FACE_LOST_BODY_SEEN, 25)
+    assert sim.names() == ["phone"]
+
+
+def test_phone_flag_resets_between_episodes():
+    sim = Sim(rule_cooldown_s=0, global_cooldown_s=0)
+    sim.hold(PHONE_DOWN, 31).hold(GOOD, 5).hold(HEAD_DOWN, 31)
+    assert sim.names() == ["phone", "head_down"]
+
+
+def test_phone_break_mutes_posture_alerts():
+    sim = Sim()
+    sim.engine.mute(until=sim.t + 600)
+    sim.hold(PHONE_DOWN, 300)
+    assert sim.names() == []
+    assert sim.last.status == State.OK
+
+
+def test_after_phone_break_alerts_resume():
+    sim = Sim()
+    sim.engine.mute(until=sim.t + 60)
+    sim.hold(PHONE_DOWN, 60)
+    assert sim.names() == []
+    sim.hold(PHONE_DOWN, 31)  # timer starts fresh after the break
+    assert sim.names() == ["phone"]
+
+
+def test_unmute_ends_break_early():
+    sim = Sim()
+    sim.engine.mute(until=sim.t + 600)
+    sim.hold(PHONE_DOWN, 10)
+    sim.engine.unmute()
+    sim.hold(PHONE_DOWN, 31)
+    assert sim.names() == ["phone"]
 
 
 def test_missing_values_never_count_as_bad():

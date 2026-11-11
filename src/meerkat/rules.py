@@ -33,6 +33,10 @@ RULE_ORDER = (
 )
 
 
+# Reported instead of "head_down" when the head-down episode looks like phone use.
+PHONE = "phone"
+
+
 class State(IntEnum):
     OK = 0
     WARN = 1
@@ -102,12 +106,23 @@ class RulesEngine:
         self._last_global = -math.inf
         self._last_face: PostureMetrics | None = None
         self._last_face_t = -math.inf
+        self._phone_episode = False
+        self.muted_until = -math.inf
 
     def reset(self) -> None:
         """Forget current episodes (keeps cooldown history)."""
         for tr in self._tracks.values():
             tr.state, tr.good_since, tr.notified = State.OK, None, False
         self._last_face = None
+        self._phone_episode = False
+
+    def mute(self, until: float) -> None:
+        """No posture judgement before ``until`` (e.g. a phone break the user asked for)."""
+        self.muted_until = until
+        self.reset()
+
+    def unmute(self) -> None:
+        self.muted_until = -math.inf
 
     def update(
         self, t: float, m: PostureMetrics, zones: Mapping[str, PostureMetrics]
@@ -115,6 +130,10 @@ class RulesEngine:
         if not zones:
             self.reset()
             return Evaluation(State.OK)
+        if t < self.muted_until:
+            self.reset()
+            return Evaluation(State.OK, nearest_zone(m, zones))
+        face_hidden = False
         if m.present:
             self._last_face, self._last_face_t = m, t
         elif (
@@ -130,6 +149,7 @@ class RulesEngine:
                 shoulder_width=m.shoulder_width,
                 neck_drop=m.neck_drop,
             )
+            face_hidden = True
         else:
             self.reset()
             return Evaluation(State.OK)
@@ -175,8 +195,25 @@ class RulesEngine:
                     and t - self._last_global >= self.alerts.global_cooldown_s
                 ):
                     tr.notified, tr.last_notified, self._last_global = True, t, t
-                    alerts.append(name)
+                    if name == "head_down" and self._phone_episode:
+                        alerts.append(PHONE)
+                    else:
+                        alerts.append(name)
 
+        self._update_phone_episode(m, base, face_hidden)
         states = {name: tr.state for name, tr in self._tracks.items()}
         status = max(states.values(), default=State.OK)
         return Evaluation(status, zone, states, tuple(alerts))
+
+    def _update_phone_episode(
+        self, m: PostureMetrics, base: PostureMetrics, face_hidden: bool
+    ) -> None:
+        """A head-down episode looks like phone use if the head went very low or so far
+        down that the face disappeared. Then the head_down alert is reported as ``phone``.
+        Note: no object detection; this is a posture heuristic."""
+        if self._tracks["head_down"].state == State.OK:
+            self._phone_episode = False
+            return
+        d = _diff(m.head_pitch, base.head_pitch)
+        if face_hidden or (d is not None and -d >= self.alerts.phone_pitch_deg):
+            self._phone_episode = True

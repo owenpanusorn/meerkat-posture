@@ -64,7 +64,11 @@ class Controller(Protocol):
     debug_enabled: bool
     recording: bool
     camera_index: int
+    phone_break_active: bool
 
+    def phone_break_options(self) -> list[int]: ...
+    def start_phone_break(self, minutes: int) -> None: ...
+    def end_phone_break(self) -> None: ...
     def status_text(self) -> str: ...
     def stats_lines(self) -> list[str]: ...
     def has_zone(self, zone: str) -> bool: ...
@@ -104,6 +108,12 @@ class Tray:
             Item("จนกว่าจะกดเปิด", act(lambda: ctl.pause(None))),
         )
         stats_menu = Menu(lambda: [Item(line, None, enabled=False) for line in ctl.stats_lines()])
+        phone_menu = Menu(
+            lambda: [
+                Item(f"{m} นาที", act(lambda m=m: ctl.start_phone_break(m)))
+                for m in ctl.phone_break_options()
+            ]
+        )
         camera_menu = Menu(
             *(
                 Item(
@@ -121,6 +131,16 @@ class Tray:
             Menu.SEPARATOR,
             Item("หยุดชั่วคราว (ปิดกล้อง)", pause_menu, visible=lambda item: not ctl.paused),
             Item("เปิดต่อ", act(ctl.resume), visible=lambda item: ctl.paused),
+            Item(
+                "พักเล่นโทรศัพท์",
+                phone_menu,
+                visible=lambda item: not ctl.paused and not ctl.phone_break_active,
+            ),
+            Item(
+                "จบพักเล่นโทรศัพท์",
+                act(ctl.end_phone_break),
+                visible=lambda item: ctl.phone_break_active,
+            ),
             Item("เลื่อนเตือนลุก", act(ctl.snooze_sitting)),
             Menu.SEPARATOR,
             Item("Calibrate จอหลัก", act(lambda: ctl.calibrate("main"))),

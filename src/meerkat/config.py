@@ -59,6 +59,9 @@ class AlertConfig:
     # Face lost but shoulders still visible (head bowed / turned away): keep judging with
     # the last head angles for up to this long before treating it as unknown.
     face_lost_hold_s: float = 120.0
+    # Head this far below baseline (or face lost while bowed) = "looking at your phone".
+    phone_pitch_deg: float = 25.0
+    phone_break_options_min: list[int] = field(default_factory=lambda: [5, 10, 15])
     notifications: bool = True
     sound_posture: bool = True  # play the system notification sound for posture alerts
     sound_break: bool = True  # ... and for stand-up reminders
@@ -141,6 +144,10 @@ def _merge(target: object, values: dict) -> None:
                 value = int(value)
             elif isinstance(current, float):
                 value = float(value)
+            elif isinstance(current, list):
+                value = [int(v) for v in value if int(v) > 0]
+                if not value:
+                    continue
         except (TypeError, ValueError):
             continue
         setattr(target, key, value)
