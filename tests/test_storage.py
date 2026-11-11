@@ -11,6 +11,7 @@ from meerkat.storage import (
     DayStats,
     SessionRecorder,
     Storage,
+    Summary,
     day_bounds,
     format_stats,
     read_session,
@@ -105,6 +106,51 @@ def test_day_stats():
     assert stats.stand_ups == 1 and stats.break_reminders == 1
     assert stats.zone_share["main"] == pytest.approx(2 / 3, abs=0.01)
     assert stats.zone_share["second"] == pytest.approx(1 / 3, abs=0.01)
+
+
+def _samples(db: Storage, t0: float, pattern):
+    """pattern: list of (minutes, present_frac). Writes contiguous 10 s samples."""
+    t = t0
+    for minutes, frac in pattern:
+        for _ in range(int(minutes * 6)):
+            m = GOOD if frac > 0 else AWAY
+            db.add_sample(Summary(t, 10.0, frac, "main" if frac else None, 0, m))
+            t += 10
+    return t
+
+
+def test_session_continues_after_quick_restart():
+    db = Storage(":memory:")
+    end = _samples(db, 1000.0, [(25, 1.0)])
+    start = db.current_session_start(end + 30, away_s=60)  # app was off 30 s
+    assert start == 1000.0
+
+
+def test_session_not_restored_after_long_gap():
+    db = Storage(":memory:")
+    end = _samples(db, 1000.0, [(25, 1.0)])
+    assert db.current_session_start(end + 600, away_s=60) is None
+
+
+def test_session_starts_after_last_time_away():
+    db = Storage(":memory:")
+    # sat 20 min, away 2 min (stood up), sat 15 min
+    end = _samples(db, 1000.0, [(20, 1.0), (2, 0.0), (15, 1.0)])
+    start = db.current_session_start(end + 10, away_s=60)
+    assert start == pytest.approx(end - 15 * 60)
+
+
+def test_short_absence_does_not_split_session():
+    db = Storage(":memory:")
+    end = _samples(db, 1000.0, [(20, 1.0), (0.5, 0.0), (10, 1.0)])
+    assert db.current_session_start(end + 10, away_s=60) == 1000.0
+
+
+def test_restart_gap_inside_history_splits_at_long_gap():
+    db = Storage(":memory:")
+    end1 = _samples(db, 1000.0, [(20, 1.0)])
+    end2 = _samples(db, end1 + 900, [(10, 1.0)])  # app off 15 min in between
+    assert db.current_session_start(end2 + 10, away_s=60) == end1 + 900
 
 
 def test_format_stats():

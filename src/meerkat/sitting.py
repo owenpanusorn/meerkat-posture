@@ -32,6 +32,12 @@ class SittingTimer:
     def sitting_s(self, t: float) -> float:
         return 0.0 if self._start is None else t - self._start
 
+    def restore(self, t: float, sitting_for_s: float) -> None:
+        """Continue a session that started ``sitting_for_s`` seconds before ``t``."""
+        if sitting_for_s > 0:
+            self._start = t - sitting_for_s
+            self._last_seen = t
+
     def snooze(self, t: float, duration_s: float) -> None:
         self._snooze_until = t + duration_s
 

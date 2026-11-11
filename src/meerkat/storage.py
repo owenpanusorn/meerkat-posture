@@ -239,6 +239,40 @@ class Storage:
         ).fetchone()
         return float(v)
 
+    def current_session_start(
+        self, now: float, away_s: float, max_gap_s: float = 120.0
+    ) -> float | None:
+        """When did the current sitting session start, judging from stored samples?
+
+        Used after a restart so the sitting timer continues instead of starting at 0.
+        Walks back from the newest sample and stops at either:
+        - a gap with no samples longer than ``max_gap_s`` (app off / paused), or
+        - ``away_s`` seconds of nobody in front of the camera (stood up).
+        Returns None if the newest sample is already more than ``max_gap_s`` old.
+        """
+        rows = self.conn.execute(
+            "SELECT ts, duration_s, present_frac FROM samples"
+            " WHERE ts > ? AND ts <= ? ORDER BY ts DESC",
+            (now - 12 * 3600, now),
+        ).fetchall()
+        if not rows or now - (rows[0][0] + rows[0][1]) > max_gap_s:
+            return None
+        start = None
+        absent = 0.0
+        next_ts = now
+        for ts, duration, present_frac in rows:
+            if next_ts - (ts + duration) > max_gap_s:
+                break
+            if present_frac < 0.1:
+                absent += duration
+                if absent >= away_s:
+                    break
+            else:
+                absent = 0.0
+                start = ts
+            next_ts = ts
+        return start
+
     def close(self) -> None:
         self.conn.close()
 

@@ -219,6 +219,7 @@ class App:
         next_zone_check = time.monotonic() + ZONE_CHECK_EVERY_S
         bad_reads = 0
 
+        self._restore_sitting()
         if calibration.MAIN not in self.zones:
             self._start_calibration(calibration.MAIN, time.monotonic(), first_run=True)
 
@@ -299,6 +300,20 @@ class App:
                 if (last := self.aggregator.flush(time.time())) is not None:
                     self.db.add_sample(last)
                 self.db.close()
+
+    def _restore_sitting(self) -> None:
+        """After a quick restart, keep counting the sitting time from before."""
+        if self.db is None:
+            return
+        try:
+            wall = time.time()
+            start = self.db.current_session_start(wall, self.cfg.sitting.away_s)
+        except Exception:
+            log.exception("cannot restore sitting time")
+            return
+        if start is not None:
+            self.sitting.restore(time.monotonic(), wall - start)
+            log.info("continuing sitting session: %.0f min so far", (wall - start) / 60)
 
     def _open_camera(self, now: float) -> bool:
         if now < self._next_camera_try:

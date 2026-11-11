@@ -58,6 +58,14 @@ def test_snooze_delays_reminder():
     assert fired[0] >= 39 * 60
 
 
+def test_restore_continues_session():
+    timer = SittingTimer()
+    timer.restore(1000.0, 25 * 60)  # restarted after 25 min of sitting
+    assert timer.active and timer.sitting_s(1000.0) == 25 * 60
+    fired = run(timer, 1000.0, 6 * 60, True)
+    assert len(fired) == 1 and fired[0] <= 1000.0 + 5 * 60 + 1
+
+
 def test_no_reminder_while_away():
     timer = SittingTimer()
     run(timer, 0, 29 * 60 + 30, True)
