@@ -34,6 +34,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="re-run the rules on a recorded session (numbers only) and print the alerts",
     )
     parser.add_argument(
+        "--settings", action="store_true", help="open the settings window (edits config.toml)"
+    )
+    parser.add_argument(
         "--selftest",
         action="store_true",
         help="check models, icons and sounds load (no camera), log the result and exit",
@@ -95,6 +98,12 @@ def selftest() -> int:
 
     draw_meerkat("wave", 1.5)
     log.info("selftest: buddy ok")
+    from tkinter import ttk  # noqa: F401  (settings window)
+
+    from meerkat import config, settings_window
+
+    settings_window.apply(config.Config(), settings_window.defaults())
+    log.info("selftest: settings ok")
 
     log.info("selftest: OK")
     return 0
@@ -110,6 +119,11 @@ def main(argv: list[str] | None = None) -> int:
         except Exception:
             log.exception("selftest: FAILED")
             return 1
+
+    if args.settings:
+        from meerkat import settings_window
+
+        return settings_window.run(args.config)
 
     if args.replay:
         from meerkat import config, replay, storage

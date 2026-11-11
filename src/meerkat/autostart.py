@@ -19,7 +19,7 @@ RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
 VALUE_NAME = "Meerkat"
 MUTEX_NAME = "Local\\MeerkatPostureSingleInstance"
 
-_mutex_handle = None
+_mutex_handles: list[int] = []  # held for the life of the process
 
 
 def supported() -> bool:
@@ -67,9 +67,8 @@ def set_enabled(enabled: bool) -> bool:
     return is_enabled()
 
 
-def acquire_single_instance() -> bool:
-    """True if this is the only running Meerkat. Keep the process alive to hold it."""
-    global _mutex_handle
+def acquire_single_instance(name: str = MUTEX_NAME) -> bool:
+    """True if this is the only process holding ``name``. Keep the process alive to hold it."""
     if not supported():
         return True
     import ctypes
@@ -77,11 +76,11 @@ def acquire_single_instance() -> bool:
     ERROR_ALREADY_EXISTS = 183
     kernel32 = ctypes.windll.kernel32
     kernel32.CreateMutexW.restype = ctypes.c_void_p
-    handle = kernel32.CreateMutexW(None, False, MUTEX_NAME)
+    handle = kernel32.CreateMutexW(None, False, name)
     if not handle:
         return True  # can't tell; don't block startup
     if kernel32.GetLastError() == ERROR_ALREADY_EXISTS:
         kernel32.CloseHandle(ctypes.c_void_p(handle))
         return False
-    _mutex_handle = handle
+    _mutex_handles.append(handle)
     return True

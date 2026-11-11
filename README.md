@@ -102,7 +102,7 @@ seconds (calibration). After that it lives in the system tray:
 - green: good posture, yellow: drifting, red: held a bad posture too long,
   grey (eyes closed): paused, camera off
 - right-click for: today's stats, pause, snooze the stand-up reminder, calibrate,
-  choose camera, record session, debug window, open config, quit
+  choose camera, record session, debug window, settings, quit
 
 Ctrl+C in the terminal also quits. Only one copy runs at a time.
 
@@ -126,7 +126,11 @@ load, without using the camera.
 
 ## Settings
 
-`config.toml` lives in your user config folder: `%APPDATA%\meerkat` on Windows,
+Right-click the tray icon → **"ตั้งค่า..."** opens a settings window (stand-up reminder, the
+meerkat, notifications and sounds, how sensitive each posture check is, camera and data).
+Changes apply within a few seconds, no restart needed.
+
+Everything is stored in `config.toml` in your user config folder: `%APPDATA%\meerkat` on Windows,
 `~/Library/Application Support/meerkat` on macOS, `~/.config/meerkat` on Linux.
 Edits are picked up within a few seconds. Some useful ones:
 

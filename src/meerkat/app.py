@@ -222,6 +222,22 @@ class App:
     def open_data_folder(self) -> None:
         self._open_path(config.user_config_dir())
 
+    def open_settings(self) -> None:
+        """Open the settings window in its own process (see settings_window.py)."""
+        if getattr(sys, "frozen", False):
+            cmd = [sys.executable, "--settings"]
+        else:
+            exe = Path(sys.executable)
+            pythonw = exe.with_name("pythonw.exe")  # no console window on Windows
+            cmd = [str(pythonw if pythonw.exists() else exe), "-m", "meerkat", "--settings"]
+        cmd += ["--config", str(self.config_path)]
+        flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+        try:
+            subprocess.Popen(cmd, creationflags=flags, close_fds=True)
+        except OSError:
+            log.exception("cannot open settings")
+            self._open_path(self.config_path)
+
     def open_config(self) -> None:
         path = self.config_path
         if not path.exists():

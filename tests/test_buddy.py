@@ -59,7 +59,9 @@ def test_blink_closes_the_eyes():
 
 def test_outer_edge_has_no_half_transparent_fringe():
     # Every pixel is either exactly the key color or clearly not pink-ish key.
-    img = draw_meerkat("wave", 1.25)
-    for r, g, b in img.getdata():
-        if (r, g, b) != KEY:
-            assert not (r > 200 and g < 60 and b > 200)
+    import numpy as np
+
+    px = np.array(draw_meerkat("wave", 1.25)).reshape(-1, 3).astype(int)
+    drawn = px[~(px == KEY).all(axis=1)]
+    r, g, b = drawn[:, 0], drawn[:, 1], drawn[:, 2]
+    assert not ((r > 200) & (g < 60) & (b > 200)).any()
