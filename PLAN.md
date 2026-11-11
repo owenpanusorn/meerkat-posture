@@ -245,7 +245,7 @@ meerkat-posture/
 
 ### Phase 4 — พร้อมแจกบน GitHub (1–3 สัปดาห์)
 - [ ] README: ภาพหน้าจอ, วิธีติดตั้ง, **หัวข้อ Privacy อธิบายข้อ 2 ชัด ๆ**
-- [ ] `THIRD_PARTY_NOTICES.md`: MediaPipe, OpenCV, pystray, desktop-notifier, โมเดล
+- [x] `THIRD_PARTY_NOTICES.md`: MediaPipe, OpenCV, pystray, desktop-notifier, โมเดล
 - [ ] หน้าตั้งค่าแบบ GUI (พิจารณา PySide6)
 - [ ] เริ่มอัตโนมัติตอนเปิดเครื่อง (ตัวเลือก)
 - [ ] แพ็กด้วย PyInstaller: Windows `.exe`, macOS `.app`
