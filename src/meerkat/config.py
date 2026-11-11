@@ -72,6 +72,7 @@ class AlertConfig:
 @dataclass
 class SittingConfig:
     break_after_min: float = 30.0
+    break_after_options_min: list[int] = field(default_factory=lambda: [30, 45, 60])
     repeat_min: float = 15.0
     away_s: float = 60.0
     snooze_min: float = 10.0

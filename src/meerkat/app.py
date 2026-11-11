@@ -168,6 +168,16 @@ class App:
         self._cmds.put(("recording",))
 
     @property
+    def break_after_min(self) -> float:
+        return self.cfg.sitting.break_after_min
+
+    def break_after_options(self) -> list[int]:
+        return list(self.cfg.sitting.break_after_options_min)
+
+    def set_break_after(self, minutes: int) -> None:
+        self._cmds.put(("break_after", minutes))
+
+    @property
     def phone_break_active(self) -> bool:
         return self._phone_until is not None
 
@@ -469,6 +479,17 @@ class App:
                 self.tray.refresh()
             elif cmd == "phone_break_end":
                 self._finish_phone_break(timed_out=False)
+            elif cmd == "break_after":
+                (minutes,) = args
+                if minutes != self.cfg.sitting.break_after_min:
+                    self.cfg.sitting.break_after_min = float(minutes)
+                    self._save_config()
+                    self._apply_sitting_config()
+                    self.notifier.send(
+                        f"เตือนลุกทุก {minutes} นาที",
+                        f"Meerkat จะเตือนให้ลุกเมื่อนั่งต่อเนื่องครบ {minutes} นาที",
+                    )
+                    self.tray.refresh()
 
     def _finish_phone_break(self, timed_out: bool) -> None:
         if self._phone_until is None:
@@ -602,7 +623,13 @@ class App:
             self.notifier.send("อ่าน config ไม่ได้", f"ใช้ค่าเดิมต่อไปก่อน ({e})")
             return False
         camera_changed = new.camera != self.cfg.camera
+        record_changed = new.storage.record_sessions != self.cfg.storage.record_sessions
         self.cfg = new
+        if record_changed:
+            if new.storage.record_sessions and self.recorder is None:
+                self._start_recording()
+            elif not new.storage.record_sessions and self.recorder is not None:
+                self._stop_recording()
         self.zones = calibration.load_zones(new.zones)
         self.rules.rules = dict(new.rules)
         self.rules.alerts = new.alerts

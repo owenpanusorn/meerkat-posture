@@ -66,6 +66,11 @@ class Controller(Protocol):
     recording: bool
     camera_index: int
     phone_break_active: bool
+    break_after_min: float
+
+    def break_after_options(self) -> list[int]: ...
+    def set_break_after(self, minutes: int) -> None: ...
+
     autostart_supported: bool
     autostart_enabled: bool
 
@@ -119,6 +124,17 @@ class Tray:
                 for m in ctl.phone_break_options()
             ]
         )
+        break_menu = Menu(
+            lambda: [
+                Item(
+                    f"{m} นาที",
+                    act(lambda m=m: ctl.set_break_after(m)),
+                    checked=lambda item, m=m: ctl.break_after_min == m,
+                    radio=True,
+                )
+                for m in ctl.break_after_options()
+            ]
+        )
         camera_menu = Menu(
             *(
                 Item(
@@ -147,6 +163,10 @@ class Tray:
                 visible=lambda item: ctl.phone_break_active,
             ),
             Item("เลื่อนเตือนลุก", act(ctl.snooze_sitting)),
+            Item(
+                lambda item: f"เตือนลุกเมื่อนั่งครบ ({ctl.break_after_min:g} นาที)",
+                break_menu,
+            ),
             Menu.SEPARATOR,
             Item("Calibrate จอหลัก", act(lambda: ctl.calibrate("main"))),
             Item("Calibrate จอที่สอง", act(lambda: ctl.calibrate("second"))),
