@@ -427,7 +427,9 @@ class _BuddyWindow:
     def _image(self, pose: str, blink: bool = False):
         key = f"{pose}@{self.scale}{'-blink' if blink else ''}"
         if key not in self.images:
-            self.images[key] = self.image_tk.PhotoImage(draw_meerkat(pose, self.scale, blink))
+            img = draw_meerkat(pose, self.scale, blink)
+            # master: bind to this thread's Tk, not whichever Tk was created first
+            self.images[key] = self.image_tk.PhotoImage(img, master=self.root)
         return self.images[key]
 
     def _blink(self) -> None:

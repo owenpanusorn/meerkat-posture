@@ -4,6 +4,11 @@ Offline posture reminder. Meerkat watches your webcam, tracks your head and shou
 MediaPipe, and nudges you when you hold a bad posture too long or sit too long.
 Everything runs on your computer.
 
+<p align="center">
+  <img src="docs/images/buddy.png" width="480"
+       alt="A cartoon meerkat next to a speech bubble: sat for 30 minutes, time to stretch, with OK and snooze buttons">
+</p>
+
 > Meerkat is a reminder tool, not a medical device. If you have ongoing pain, see a
 > physiotherapist or doctor.
 
@@ -62,6 +67,25 @@ A second screen can be calibrated as its own "zone", so looking at it doesn't co
 looking away. Alerts have cooldowns (5 min per rule, 60 s between any two) so it stays quiet
 enough to leave on all day. All values are in `config.toml`.
 
+## The meerkat
+
+When you have sat too long, a little meerkat pops up in the bottom-left corner of the screen
+(not over your notifications). If you keep sitting it starts hopping, and after a while it
+walks to the middle of the screen. Stand up and it leaves by itself; come back and it cheers.
+It stays away while you present or watch something full screen.
+
+<p align="center">
+  <img src="docs/images/meerkat-poses.png" width="420"
+       alt="The meerkat in three poses: standing on watch, waving, cheering">
+</p>
+
+The tray icon shows how you are doing:
+
+<p align="center">
+  <img src="docs/images/tray-icons.png" width="300"
+       alt="Tray icons: green, yellow, red and grey (sleeping) meerkat faces">
+</p>
+
 ## Setup
 
 Needs Python 3.11+ and [uv](https://github.com/astral-sh/uv).
@@ -76,7 +100,7 @@ On first start Meerkat asks you to sit up straight and look at your main screen 
 seconds (calibration). After that it lives in the system tray:
 
 - green: good posture, yellow: drifting, red: held a bad posture too long,
-  grey: paused (camera off)
+  grey (eyes closed): paused, camera off
 - right-click for: today's stats, pause, snooze the stand-up reminder, calibrate,
   choose camera, record session, debug window, open config, quit
 
@@ -147,6 +171,7 @@ uv run ruff check . && uv run ruff format --check .
 uv run python -m meerkat --debug          # camera window only, shows the raw numbers
 uv run python scripts/make_icons.py       # regenerate tray icons
 uv run python scripts/make_sounds.py      # regenerate alert sounds
+uv run python scripts/make_readme_images.py --buddy   # README pictures (docs/images)
 ```
 
 ### Releasing
