@@ -3,28 +3,48 @@
 from __future__ import annotations
 
 import argparse
+import logging
+import os
+from pathlib import Path
 
 from meerkat import __version__
+
+# Quiet MediaPipe / TFLite native logging before it is imported.
+os.environ.setdefault("GLOG_minloglevel", "2")
+os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "2")
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(prog="meerkat", description="Offline posture reminder.")
-    parser.add_argument("--debug", action="store_true", help="open the debug camera window")
-    parser.add_argument("--camera", type=int, default=0, help="camera index (default 0)")
-    parser.add_argument("--fps", type=float, default=5.0, help="frames per second (default 5)")
+    parser.add_argument(
+        "--debug", action="store_true", help="only open the debug camera window (no tray)"
+    )
+    parser.add_argument("--camera", type=int, default=None, help="camera index for --debug")
+    parser.add_argument("--fps", type=float, default=None, help="frames per second for --debug")
+    parser.add_argument("--config", type=Path, default=None, help="path to config.toml")
     parser.add_argument("--version", action="version", version=f"meerkat {__version__}")
     return parser.parse_args(argv)
 
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
-    if args.debug:
-        from meerkat import debug_view
+    logging.basicConfig(
+        level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s"
+    )
 
-        return debug_view.run(camera_index=args.camera, fps=args.fps)
-    # Phase 2 will run the tray app here.
-    print(f"meerkat {__version__}: tray app not implemented yet, try --debug")
-    return 0
+    if args.debug:
+        from meerkat import config, debug_view
+
+        cam = config.load(args.config).camera
+        return debug_view.run(
+            camera_index=cam.index if args.camera is None else args.camera,
+            fps=cam.fps if args.fps is None else args.fps,
+            smoothing_s=cam.smoothing_s,
+        )
+
+    from meerkat.app import App
+
+    return App(args.config).run()
 
 
 if __name__ == "__main__":

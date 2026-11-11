@@ -223,15 +223,15 @@ meerkat-posture/
 - ✅ **เสร็จเมื่อ:** รัน `python -m meerkat --debug` แล้วขยับหัวเห็นตัวเลขเปลี่ยนตามจริง
 
 ### Phase 2 — MVP ใช้เองได้ (1–2 สัปดาห์)
-- [ ] `config.py`: ค่า default ทั้งหมดในข้อ 8–9, บันทึก/โหลด TOML
-- [ ] `calibration.py`: flow ข้อ 7 + เก็บลง config
-- [ ] `rules.py`: state machine + cooldown + hysteresis ตามข้อ 8
-- [ ] `tests/test_rules.py`: จำลอง timeline (ก้ม 31 วิ → ต้องเตือน 1 ครั้ง, ก้ม 29 วิ → ไม่เตือน, หันไปจอสอง 5 นาที → ไม่เตือน)
-- [ ] `sitting.py` + tests
-- [ ] `notifier.py`: แจ้งเตือน native + ข้อความมีบุคลิก Meerkat
-- [ ] `tray.py`: ไอคอน 4 สถานะ + เมนูข้อ 10 (ยกเว้นสถิติ)
-- [ ] Pause = release กล้องจริง
-- [ ] `app.py`: ประกอบทุกส่วน, ปิดแอปแล้วปล่อยกล้องเรียบร้อย
+- [x] `config.py`: ค่า default ทั้งหมดในข้อ 8–9, บันทึก/โหลด TOML
+- [x] `calibration.py`: flow ข้อ 7 + เก็บลง config
+- [x] `rules.py`: state machine + cooldown + hysteresis ตามข้อ 8
+- [x] `tests/test_rules.py`: จำลอง timeline (ก้ม 31 วิ → ต้องเตือน 1 ครั้ง, ก้ม 29 วิ → ไม่เตือน, หันไปจอสอง 5 นาที → ไม่เตือน)
+- [x] `sitting.py` + tests
+- [x] `notifier.py`: แจ้งเตือน native + ข้อความมีบุคลิก Meerkat
+- [x] `tray.py`: ไอคอน 4 สถานะ + เมนูข้อ 10 (ยกเว้นสถิติ)
+- [x] Pause = release กล้องจริง
+- [x] `app.py`: ประกอบทุกส่วน, ปิดแอปแล้วปล่อยกล้องเรียบร้อย
 - ✅ **เสร็จเมื่อ:** เปิดทิ้งไว้ทำงานได้ทั้งวัน เตือนถูก ไม่รบกวนจนอยากปิด
 
 ### Phase 3 — จูนจากการใช้จริง (1–2 สัปดาห์, ทำคู่กับการใช้)

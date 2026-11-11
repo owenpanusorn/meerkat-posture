@@ -79,12 +79,48 @@ def draw(frame: np.ndarray, lm: Landmarks, m: PostureMetrics, fps: float) -> np.
     return img
 
 
+class DebugWindow:
+    """OpenCV window. All calls must come from the same thread (the camera thread)."""
+
+    def __init__(self) -> None:
+        self._open = False
+        self._last = time.monotonic()
+        self._fps = 0.0
+
+    def show(
+        self, frame: np.ndarray, lm: Landmarks, m: PostureMetrics, extra: list[str] = ()
+    ) -> bool:
+        """Draw one frame. Returns False once the user closed the window."""
+        now = time.monotonic()
+        self._fps = 0.8 * self._fps + 0.2 / max(now - self._last, 1e-6)
+        self._last = now
+        if not self._open:
+            cv2.namedWindow(WINDOW, cv2.WINDOW_NORMAL)
+            self._open = True
+        img = draw(frame, lm, m, self._fps)
+        for i, text in enumerate(extra):
+            y = img.shape[0] - 12 - 22 * (len(extra) - 1 - i)
+            cv2.putText(img, text, (8, y), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 0, 0), 3)
+            cv2.putText(img, text, (8, y), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 255, 255), 1)
+        cv2.imshow(WINDOW, img)
+        key = cv2.waitKey(1) & 0xFF
+        if key in (ord("q"), 27) or cv2.getWindowProperty(WINDOW, cv2.WND_PROP_VISIBLE) < 1:
+            self.close()
+            return False
+        return True
+
+    def close(self) -> None:
+        if self._open:
+            cv2.destroyWindow(WINDOW)
+            cv2.waitKey(1)
+            self._open = False
+
+
 def run(camera_index: int = 0, fps: float = 5.0, smoothing_s: float = 1.5) -> int:
+    """Standalone debug mode (``python -m meerkat --debug``)."""
     smoother = Smoother(smoothing_s)
-    last = time.monotonic()
-    shown_fps = 0.0
+    window = DebugWindow()
     with Camera(camera_index, fps) as cam, Detector() as det:
-        cv2.namedWindow(WINDOW, cv2.WINDOW_NORMAL)
         try:
             while True:
                 frame = cam.read()
@@ -92,19 +128,12 @@ def run(camera_index: int = 0, fps: float = 5.0, smoothing_s: float = 1.5) -> in
                     print("camera returned no frame")
                     return 1
                 now = time.monotonic()
-                shown_fps = 0.8 * shown_fps + 0.2 * (1.0 / max(now - last, 1e-6))
-                last = now
-
                 lm = det.detect(frame, int(now * 1000))
                 m = smoother.update(now, compute_metrics(lm))
-                cv2.imshow(WINDOW, draw(frame, lm, m, shown_fps))
+                still_open = window.show(frame, lm, m)
                 del frame  # frames are never kept
-
-                key = cv2.waitKey(1) & 0xFF
-                if key in (ord("q"), 27):
-                    break
-                if cv2.getWindowProperty(WINDOW, cv2.WND_PROP_VISIBLE) < 1:
+                if not still_open:
                     break
         finally:
-            cv2.destroyAllWindows()
+            window.close()
     return 0
