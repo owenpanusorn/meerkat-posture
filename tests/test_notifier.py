@@ -14,7 +14,9 @@ def captured(monkeypatch):
 
     def make(**kwargs):
         n = Notifier(**kwargs)
-        n.send = lambda title, message, sound=None: sent.append((title, sound))
+        n.send = lambda title, message, sound=None, sticky=False: sent.append(
+            (title, sound, sticky)
+        )
         return n
 
     return make, sent
@@ -25,7 +27,7 @@ def test_posture_and_break_have_distinct_sounds(captured):
     n = make()
     n.alert("head_down")
     n.break_reminder(30)
-    assert [s for _, s in sent] == [POSTURE, BREAK]
+    assert [(s, k) for _, s, k in sent] == [(POSTURE, True), (BREAK, True)]
 
 
 def test_sound_can_be_turned_off_per_kind(captured):
@@ -33,14 +35,14 @@ def test_sound_can_be_turned_off_per_kind(captured):
     n = make(sound_posture=False, sound_break=True)
     n.alert("head_down")
     n.break_reminder(30)
-    assert [s for _, s in sent] == [None, BREAK]
+    assert [s for _, s, _ in sent] == [None, BREAK]
 
 
 def test_info_messages_are_silent(monkeypatch):
     monkeypatch.setattr(Notifier, "_run", lambda self: None)
     n = Notifier()
     n.send("x", "y")
-    assert n._q.get_nowait() == ("x", "y", None)
+    assert n._q.get_nowait() == ("x", "y", None, False)
 
 
 @pytest.mark.parametrize("kind", [POSTURE, BREAK])

@@ -102,25 +102,34 @@ class Notifier:
         sound_posture: bool = True,
         sound_break: bool = True,
         sound_style: str = "meerkat",
+        sticky: bool = True,
     ) -> None:
         self.enabled = enabled
         self.sound_posture = sound_posture
         self.sound_break = sound_break
         self.sound_style = sound_style
-        self._q: queue.Queue[tuple[str, str, str | None] | None] = queue.Queue()
+        self.sticky = sticky
+        self._q: queue.Queue[tuple[str, str, str | None, bool] | None] = queue.Queue()
         self._thread = threading.Thread(target=self._run, name="notifier", daemon=True)
         self._thread.start()
 
-    def send(self, title: str, message: str, sound: str | None = None) -> None:
+    def send(
+        self, title: str, message: str, sound: str | None = None, sticky: bool = False
+    ) -> None:
+        """``sticky``: stay on screen until the user closes it (posture / stand-up alerts)."""
         if self.enabled:
-            self._q.put((title, message, sound))
+            self._q.put((title, message, sound, sticky))
 
     def alert(self, rule: str) -> None:
         title, message = RULE_MESSAGES.get(rule, (rule, ""))
-        self.send(title, message, sound=POSTURE if self.sound_posture else None)
+        self.send(title, message, sound=POSTURE if self.sound_posture else None, sticky=self.sticky)
 
     def break_reminder(self, minutes: int) -> None:
-        self.send(*break_message(minutes), sound=BREAK if self.sound_break else None)
+        self.send(
+            *break_message(minutes),
+            sound=BREAK if self.sound_break else None,
+            sticky=self.sticky,
+        )
 
     def close(self) -> None:
         self._q.put(None)
@@ -128,20 +137,24 @@ class Notifier:
 
     def _run(self) -> None:
         default_sound = None
+        ok_button: tuple = ()
         try:
-            from desktop_notifier import DEFAULT_SOUND, DesktopNotifierSync, Icon
+            from desktop_notifier import DEFAULT_SOUND, Button, DesktopNotifierSync, Icon
 
             default_sound = DEFAULT_SOUND
+            ok_button = (Button(title="รับทราบ"),)
             kwargs = {"app_name": APP_NAME}
             if ICON_PATH.exists():
                 kwargs["app_icon"] = Icon(path=ICON_PATH)
             notifier = DesktopNotifierSync(**kwargs)
+            _install_sticky_toasts(self)
         except Exception:
             log.exception("desktop notifications unavailable")
             notifier = None
 
         while (item := self._q.get()) is not None:
-            title, message, sound = item
+            title, message, sound, sticky = item
+            self._sending_sticky = sticky
             log.info("notify%s: %s / %s", f" ({sound})" if sound else "", title, message)
 
             system_sound = None
@@ -156,6 +169,35 @@ class Notifier:
             if notifier is None:
                 continue
             try:
-                notifier.send(title=title, message=message, sound=system_sound)
+                notifier.send(
+                    title=title,
+                    message=message,
+                    sound=system_sound,
+                    buttons=ok_button if sticky else (),
+                )
             except Exception:
                 log.exception("failed to show notification")
+
+
+def _install_sticky_toasts(owner: Notifier) -> None:
+    """Windows only: mark toasts as ``scenario="reminder"`` while ``owner`` is sending a
+    sticky one. Windows then keeps the toast on screen until the user clicks a button or
+    the close (X) instead of hiding it after ~5 s. desktop-notifier has no option for this,
+    so we wrap the XML builder it uses. Reminder toasts need at least one button.
+    """
+    if sys.platform != "win32":
+        return
+    from desktop_notifier.backends import winrt
+
+    original = winrt.Element
+    if getattr(original, "_meerkat_wrapped", False):
+        return
+
+    def element(tag, attrib=None, **extra):
+        el = original(tag, attrib or {}, **extra)
+        if tag == "toast" and getattr(owner, "_sending_sticky", False):
+            el.set("scenario", "reminder")
+        return el
+
+    element._meerkat_wrapped = True  # type: ignore[attr-defined]
+    winrt.Element = element
