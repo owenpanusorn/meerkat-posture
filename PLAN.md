@@ -215,11 +215,11 @@ meerkat-posture/
 - [x] `git init` + commit แรก
 
 ### Phase 1 — ต้นแบบ: เห็นตัวเลข (1–2 วัน)
-- [ ] `camera.py`: เปิดกล้องตาม index ใน config, อ่านเฟรมตาม fps ที่กำหนด
-- [ ] `detector.py`: เรียก Face + Pose Landmarker (โหมด VIDEO)
-- [ ] `metrics.py`: คำนวณค่าทั้งหมดในข้อ 6 + smoothing
-- [ ] `debug_view.py`: หน้าต่างแสดงภาพ + จุด + ตัวเลข yaw/pitch/roll/tilt/scale แบบ real-time
-- [ ] `tests/test_metrics.py`: ทดสอบด้วย landmark ปลอม (เช่น หันขวา 30° ต้องได้ yaw ≈ 30)
+- [x] `camera.py`: เปิดกล้องตาม index ใน config, อ่านเฟรมตาม fps ที่กำหนด
+- [x] `detector.py`: เรียก Face + Pose Landmarker (โหมด VIDEO)
+- [x] `metrics.py`: คำนวณค่าทั้งหมดในข้อ 6 + smoothing
+- [x] `debug_view.py`: หน้าต่างแสดงภาพ + จุด + ตัวเลข yaw/pitch/roll/tilt/scale แบบ real-time
+- [x] `tests/test_metrics.py`: ทดสอบด้วย landmark ปลอม (เช่น หันขวา 30° ต้องได้ yaw ≈ 30)
 - ✅ **เสร็จเมื่อ:** รัน `python -m meerkat --debug` แล้วขยับหัวเห็นตัวเลขเปลี่ยนตามจริง
 
 ### Phase 2 — MVP ใช้เองได้ (1–2 สัปดาห์)
