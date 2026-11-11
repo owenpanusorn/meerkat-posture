@@ -93,6 +93,12 @@ sound_style = "meerkat"   # or "system" for the OS notification sound
 break_after_min = 30.0
 repeat_min = 15.0
 
+[buddy]                   # the meerkat that pops up to get you standing
+enabled = true
+escalate_after_min = 5.0  # starts hopping if you're still sitting
+center_after_min = 10.0   # walks to the middle of the screen
+center = true             # false = stay in the corner
+
 [rules.head_down]
 threshold = 15.0          # degrees below your calibrated pose
 hold_s = 30.0

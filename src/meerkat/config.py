@@ -79,6 +79,16 @@ class SittingConfig:
 
 
 @dataclass
+class BuddyConfig:
+    """The meerkat that pops up for the stand-up reminder."""
+
+    enabled: bool = True
+    escalate_after_min: float = 5.0  # starts hopping if you're still sitting
+    center_after_min: float = 10.0  # walks to the middle of the screen
+    center: bool = True  # set false to keep it in the corner
+
+
+@dataclass
 class RuleConfig:
     threshold: float
     hold_s: float
@@ -106,6 +116,7 @@ class Config:
     alerts: AlertConfig = field(default_factory=AlertConfig)
     sitting: SittingConfig = field(default_factory=SittingConfig)
     storage: StorageConfig = field(default_factory=StorageConfig)
+    buddy: BuddyConfig = field(default_factory=BuddyConfig)
     rules: dict[str, RuleConfig] = field(default_factory=default_rules)
     # Calibrated baselines: zone name -> metric name -> value.
     zones: dict[str, dict[str, float]] = field(default_factory=dict)
@@ -120,6 +131,7 @@ class Config:
         _merge(cfg.alerts, data.get("alerts", {}))
         _merge(cfg.sitting, data.get("sitting", {}))
         _merge(cfg.storage, data.get("storage", {}))
+        _merge(cfg.buddy, data.get("buddy", {}))
         for name, values in data.get("rules", {}).items():
             if name in cfg.rules and isinstance(values, dict):
                 _merge(cfg.rules[name], values)

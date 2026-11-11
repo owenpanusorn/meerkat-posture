@@ -35,7 +35,7 @@ a = Analysis(
     datas=datas,
     binaries=binaries,
     hiddenimports=hiddenimports,
-    excludes=["tkinter", "pytest", "IPython"],  # mediapipe imports matplotlib
+    excludes=["pytest", "IPython"],  # keep tkinter (buddy) and matplotlib (mediapipe)
     noarchive=False,
 )
 pyz = PYZ(a.pure)

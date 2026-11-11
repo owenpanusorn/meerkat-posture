@@ -23,6 +23,7 @@ from pathlib import Path
 import numpy as np
 
 from meerkat import autostart, calibration, config, notifier, storage
+from meerkat.buddy import Buddy, Nudge
 from meerkat.camera import Camera, CameraError
 from meerkat.debug_view import DebugWindow
 from meerkat.detector import Detector
@@ -74,6 +75,13 @@ class App:
         self.notifier = Notifier(
             a.notifications, a.sound_posture, a.sound_break, a.sound_style, a.sticky
         )
+        bc = self.cfg.buddy
+        self.nudge = Nudge(bc.escalate_after_min * 60, bc.center_after_min * 60, bc.center)
+        self.buddy: Buddy | None = None  # created on first use (starts a Tk thread)
+        self._buddy_level = 0
+        self._can_disturb = True
+        self._next_disturb_check = 0.0
+        self._celebrate_pending = False
 
         self.paused = False
         self.debug_enabled = False
@@ -98,6 +106,8 @@ class App:
             self._stop.set()
             if self._worker.is_alive():
                 self._worker.join(timeout=5)
+            if self.buddy is not None:
+                self.buddy.close()
             self.notifier.close()
         return 0
 
@@ -298,6 +308,8 @@ class App:
                 if self._phone_until is not None and now >= self._phone_until:
                     self._finish_phone_break(timed_out=True)
 
+                self._update_buddy(now)
+
                 if self.paused or not self.debug_enabled:
                     window.close()
 
@@ -402,8 +414,16 @@ class App:
         if self.sitting.update(now, m.person_present):
             self.notifier.break_reminder(int(self.sitting.sitting_s(now) // 60))
             self._event("break_reminder")
+            self._start_nudge(now)
         if was_sitting and not self.sitting.active:
             self._event("stood_up")
+            if self.nudge.active:
+                self._celebrate_pending = True  # cheer when they come back
+            self._stop_nudge()
+        elif not was_sitting and self.sitting.active and self._celebrate_pending:
+            self._celebrate_pending = False
+            if self.buddy is not None and self._can_disturb:
+                self.buddy.celebrate()
 
         summary = self.aggregator.add(time.time(), m, ev.zone, ev.status)
         if summary is not None and self.db is not None:
@@ -411,6 +431,41 @@ class App:
 
         self._set_status(self._live_text(now, m), _ICON_FOR_STATE[ev.status])
         return ev
+
+    # ------------------------------------------------------------------ buddy
+
+    def _start_nudge(self, now: float) -> None:
+        if not self.cfg.buddy.enabled:
+            return
+        if self.buddy is None:
+            self.buddy = Buddy(
+                on_ack=lambda: self._cmds.put(("buddy_ack",)),
+                on_snooze=lambda: self._cmds.put(("snooze",)),
+                snooze_min=self.cfg.sitting.snooze_min,
+            )
+        self.nudge.start(now)
+        self._next_disturb_check = 0.0
+
+    def _stop_nudge(self) -> None:
+        self.nudge.stop()
+        if self.buddy is not None and self._buddy_level:
+            self.buddy.hide()
+        self._buddy_level = 0
+
+    def _update_buddy(self, now: float) -> None:
+        """Show / escalate the meerkat; keep it away while presenting or full screen."""
+        if self.buddy is None or not self.nudge.active:
+            return
+        if now >= self._next_disturb_check:
+            self._next_disturb_check = now + 2.0
+            self._can_disturb = notifier.user_can_be_disturbed()
+        level = self.nudge.level(now) if self._can_disturb else 0
+        if level != self._buddy_level:
+            if level == 0:
+                self.buddy.hide()
+            else:
+                self.buddy.show(level, int(self.sitting.sitting_s(now) // 60))
+            self._buddy_level = level
 
     def _event(self, kind: str, detail: str | None = None) -> None:
         if self.db is not None:
@@ -431,14 +486,19 @@ class App:
                 self.rules.unmute()
                 self.rules.reset()
                 self.sitting.reset()
+                self._stop_nudge()
+                self._celebrate_pending = False
                 self.smoother.reset()
                 self._event("pause", None if minutes is None else f"{minutes:g}")
                 self.tray.refresh()
             elif cmd == "resume":
                 self._resume()
+            elif cmd == "buddy_ack":
+                self._stop_nudge()
             elif cmd == "snooze":
                 minutes = self.cfg.sitting.snooze_min
                 self.sitting.snooze(now, minutes * 60)
+                self._stop_nudge()
                 self.notifier.send("เลื่อนเตือนลุกแล้ว", f"จะไม่เตือนให้ลุกไป {minutes:g} นาที")
             elif cmd == "calibrate":
                 (zone,) = args
@@ -641,6 +701,14 @@ class App:
         self.notifier.sound_style = new.alerts.sound_style
         self.notifier.sticky = new.alerts.sticky
         self.aggregator.period_s = new.storage.sample_period_s
+        bc = new.buddy
+        self.nudge.escalate_after_s = bc.escalate_after_min * 60
+        self.nudge.center_after_s = bc.center_after_min * 60
+        self.nudge.center = bc.center
+        if not bc.enabled:
+            self._stop_nudge()
+        if self.buddy is not None:
+            self.buddy.snooze_min = new.sitting.snooze_min
         self._apply_sitting_config()
         log.info("config reloaded")
         return camera_changed

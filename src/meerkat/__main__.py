@@ -85,8 +85,16 @@ def selftest() -> int:
         if not notifier.sound_path(kind).exists():
             raise FileNotFoundError(notifier.sound_path(kind))
     log.info("selftest: sounds ok")
+    import tkinter  # noqa: F401  (meerkat buddy window)
+
     import pystray  # noqa: F401
     from desktop_notifier import DesktopNotifierSync  # noqa: F401
+    from PIL import ImageTk  # noqa: F401
+
+    from meerkat.buddy import draw_meerkat
+
+    draw_meerkat("wave", 1.5)
+    log.info("selftest: buddy ok")
 
     log.info("selftest: OK")
     return 0
