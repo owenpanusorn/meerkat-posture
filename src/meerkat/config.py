@@ -62,6 +62,7 @@ class AlertConfig:
     notifications: bool = True
     sound_posture: bool = True  # play the system notification sound for posture alerts
     sound_break: bool = True  # ... and for stand-up reminders
+    sound_style: str = "meerkat"  # "meerkat" (own chirps) or "system" (OS default sound)
 
 
 @dataclass

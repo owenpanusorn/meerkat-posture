@@ -71,7 +71,7 @@ class App:
         self._apply_sitting_config()
         self.smoother = Smoother(self.cfg.camera.smoothing_s)
         a = self.cfg.alerts
-        self.notifier = Notifier(a.notifications, a.sound_posture, a.sound_break)
+        self.notifier = Notifier(a.notifications, a.sound_posture, a.sound_break, a.sound_style)
 
         self.paused = False
         self.debug_enabled = False
@@ -533,6 +533,7 @@ class App:
         self.notifier.enabled = new.alerts.notifications
         self.notifier.sound_posture = new.alerts.sound_posture
         self.notifier.sound_break = new.alerts.sound_break
+        self.notifier.sound_style = new.alerts.sound_style
         self.aggregator.period_s = new.storage.sample_period_s
         self._apply_sitting_config()
         log.info("config reloaded")

@@ -1,38 +1,58 @@
-from meerkat.notifier import Notifier
+import wave
+
+import pytest
+
+from meerkat import notifier as nmod
+from meerkat.notifier import BREAK, POSTURE, Notifier, sound_path
 
 
-class Captured(Notifier):
-    """Notifier that records queued messages instead of showing them."""
+@pytest.fixture
+def captured(monkeypatch):
+    """A Notifier whose background thread is replaced by a list of what would be sent."""
+    monkeypatch.setattr(Notifier, "_run", lambda self: None)
+    sent = []
 
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        self.sent = []
+    def make(**kwargs):
+        n = Notifier(**kwargs)
+        n.send = lambda title, message, sound=None: sent.append((title, sound))
+        return n
 
-    def send(self, title, message, sound=False):
-        self.sent.append((title, sound))
-
-
-def make(**kwargs):
-    n = Captured(**kwargs)
-    n.close()  # stop the background thread; we only inspect what would be sent
-    return n
+    return make, sent
 
 
-def test_posture_and_break_have_sound_by_default():
+def test_posture_and_break_have_distinct_sounds(captured):
+    make, sent = captured
     n = make()
     n.alert("head_down")
     n.break_reminder(30)
-    assert [s for _, s in n.sent] == [True, True]
+    assert [s for _, s in sent] == [POSTURE, BREAK]
 
 
-def test_sound_can_be_turned_off_per_kind():
+def test_sound_can_be_turned_off_per_kind(captured):
+    make, sent = captured
     n = make(sound_posture=False, sound_break=True)
     n.alert("head_down")
     n.break_reminder(30)
-    assert [s for _, s in n.sent] == [False, True]
+    assert [s for _, s in sent] == [None, BREAK]
 
 
-def test_info_messages_are_silent():
-    n = make()
-    Notifier.send(n, "x", "y")  # default sound=False
-    assert n._q.get_nowait() == ("x", "y", False)
+def test_info_messages_are_silent(monkeypatch):
+    monkeypatch.setattr(Notifier, "_run", lambda self: None)
+    n = Notifier()
+    n.send("x", "y")
+    assert n._q.get_nowait() == ("x", "y", None)
+
+
+@pytest.mark.parametrize("kind", [POSTURE, BREAK])
+def test_sound_files_exist_and_are_short(kind):
+    path = sound_path(kind)
+    assert path.exists(), "run: uv run python scripts/make_sounds.py"
+    with wave.open(str(path)) as w:
+        seconds = w.getnframes() / w.getframerate()
+    assert 0.1 < seconds < 1.0
+
+
+def test_every_rule_has_a_message():
+    from meerkat.rules import RULE_ORDER
+
+    assert set(RULE_ORDER) <= set(nmod.RULE_MESSAGES)
