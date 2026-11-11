@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+build/
+dist/
+.pytest_cache/
+.ruff_cache/
+
+# Models are downloaded by scripts/download_models.py, not committed
+models/*.task
+
+# Never commit captured media or local user data (privacy rule)
+*.jpg
+*.jpeg
+*.png
+!assets/**/*.png
+*.mp4
+*.avi
+*.sqlite
+*.db
+config.local.toml
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
