@@ -36,7 +36,7 @@ def test_draw_meerkat(pose, scale):
     img = draw_meerkat(pose, scale)
     assert img.size == (round(MEERKAT_W * scale), round(MEERKAT_H * scale))
     assert img.getpixel((0, 0)) == KEY  # transparent background
-    colors = {c for _, c in img.getcolors(maxcolors=4096)}
+    colors = {c for _, c in img.getcolors(maxcolors=1 << 20)}
     assert len(colors) > 4  # actually drew something
 
 
@@ -51,3 +51,15 @@ def test_messages_for_every_level():
         title, line = MESSAGES[key]
         assert title and line
     assert "{minutes}" in MESSAGES[1][0]
+
+
+def test_blink_closes_the_eyes():
+    assert draw_meerkat("stand", blink=True).tobytes() != draw_meerkat("stand").tobytes()
+
+
+def test_outer_edge_has_no_half_transparent_fringe():
+    # Every pixel is either exactly the key color or clearly not pink-ish key.
+    img = draw_meerkat("wave", 1.25)
+    for r, g, b in img.getdata():
+        if (r, g, b) != KEY:
+            assert not (r > 200 and g < 60 and b > 200)

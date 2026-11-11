@@ -2,7 +2,7 @@
 
 Used only for the stand-up reminder (posture alerts stay as small notifications):
 
-    level 1  pops up above the taskbar, bottom-right, holding up "time to stand!"
+    level 1  pops up bottom-left above the taskbar (away from notifications), "time to stand!"
     level 2  after ``escalate_after_min``: hops to get your attention
     level 3  after ``center_after_min``: walks to the middle of the screen (optional)
 
@@ -68,66 +68,110 @@ class Nudge:
 
 KEY = (255, 0, 255)  # transparent color of the window; never used in the drawing
 KEY_HEX = "#ff00ff"
-FUR = (214, 178, 128)
-FUR_LIGHT = (240, 220, 186)
-DARK = (70, 50, 36)
-OUTLINE = (92, 66, 44)
+FUR = (214, 186, 148)
+FUR_DARK = (188, 156, 114)
+FUR_LIGHT = (244, 234, 216)
+PATCH = (92, 66, 48)
+DARK = (40, 28, 22)
+OUTLINE = (104, 76, 52)
+NOSE = (66, 44, 36)
+BLUSH = (246, 176, 166)
 WHITE = (255, 255, 255)
 
 MEERKAT_W, MEERKAT_H = 150, 230
+_SS = 4  # supersampling factor for smooth inner edges
 
 
-def draw_meerkat(pose: str = "stand", scale: float = 1.0) -> Image.Image:
-    """A standing meerkat on the key color. Poses: stand, wave, happy.
+def draw_meerkat(pose: str = "stand", scale: float = 1.0, blink: bool = False) -> Image.Image:
+    """A chibi standing meerkat on the key color. Poses: stand, wave, happy.
 
-    Drawn without anti-aliasing so the transparent key color has no fringe.
+    Drawn 4x larger and scaled down, so the inside is smooth; the outer edge is then cut
+    hard (no half-transparent pixels) so the window's key color leaves no pink fringe.
     """
     w, h = round(MEERKAT_W * scale), round(MEERKAT_H * scale)
-    img = Image.new("RGB", (w, h), KEY)
+    k = scale * _SS
+    img = Image.new("RGBA", (w * _SS, h * _SS), (0, 0, 0, 0))
     d = ImageDraw.Draw(img)
-    lw = max(2, round(2 * scale))
+    lw = max(1, round(2.2 * k))
 
-    def b(x0, y0, x1, y1):
-        return [round(x0 * scale), round(y0 * scale), round(x1 * scale), round(y1 * scale)]
+    def bx(x0, y0, x1, y1):
+        return [round(x0 * k), round(y0 * k), round(x1 * k), round(y1 * k)]
 
-    def p(*pts):
-        return [(round(x * scale), round(y * scale)) for x, y in pts]
+    def oval(box, fill, outline=False):
+        d.ellipse(bx(*box), fill=fill, outline=OUTLINE if outline else None, width=lw)
 
-    # tail (behind the body)
-    d.line(p((100, 200), (122, 190), (134, 168), (138, 140)), fill=OUTLINE, width=round(9 * scale))
-    d.line(p((100, 200), (122, 190), (134, 168), (138, 140)), fill=FUR, width=round(5 * scale))
+    def dot(x, y, r, fill, outline=False):
+        oval((x - r, y - r, x + r, y + r), fill, outline)
+
+    def limb(pts, width, fill=FUR):
+        """Thick rounded stroke with an outline."""
+        scaled = [(round(x * k), round(y * k)) for x, y in pts]
+        for color, extra in ((OUTLINE, lw), (fill, 0)):
+            wd = round(width * k / 2) + extra
+            d.line(scaled, fill=color, width=wd * 2)
+            for x, y in scaled:
+                d.ellipse([x - wd, y - wd, x + wd, y + wd], fill=color)
+
+    # tail (behind the body), dark tip
+    limb([(52, 200), (28, 192), (15, 172), (16, 150)], 10)
+    dot(16, 148, 5.5, PATCH)
     # feet
-    d.ellipse(b(42, 206, 74, 222), fill=DARK)
-    d.ellipse(b(76, 206, 108, 222), fill=DARK)
+    oval((40, 202, 74, 222), FUR, outline=True)
+    oval((76, 202, 110, 222), FUR, outline=True)
     # body + belly
-    d.ellipse(b(38, 92, 112, 216), fill=FUR, outline=OUTLINE, width=lw)
-    d.ellipse(b(55, 112, 95, 206), fill=FUR_LIGHT)
-    # arms
-    d.ellipse(b(48, 118, 66, 152), fill=FUR, outline=OUTLINE, width=lw)
-    if pose == "wave":
-        d.line(p((92, 122), (114, 92), (124, 64)), fill=OUTLINE, width=round(15 * scale))
-        d.line(p((92, 122), (114, 92), (124, 64)), fill=FUR, width=round(10 * scale))
-        d.ellipse(b(116, 52, 134, 70), fill=FUR, outline=OUTLINE, width=lw)
+    oval((36, 96, 114, 218), FUR, outline=True)
+    oval((52, 116, 98, 212), FUR_LIGHT)
+    # arms (raised arms are drawn after the head, so the paws stay in front)
+    raised = []
+    if pose == "happy":  # both paws up
+        raised = [((52, 130), (30, 112), (20, 90)), ((98, 130), (120, 112), (130, 90))]
     else:
-        d.ellipse(b(84, 118, 102, 152), fill=FUR, outline=OUTLINE, width=lw)
+        limb([(54, 130), (67, 146)], 12)
+        dot(68, 148, 7, FUR, outline=True)
+        if pose == "wave":
+            raised = [((96, 128), (122, 112), (134, 88))]
+        else:  # paws held together at the chest, like a meerkat on watch
+            limb([(96, 130), (83, 146)], 12)
+            dot(82, 148, 7, FUR, outline=True)
     # head
-    d.ellipse(b(40, 44, 50, 58), fill=DARK)  # ears
-    d.ellipse(b(100, 44, 110, 58), fill=DARK)
-    d.ellipse(b(44, 28, 106, 96), fill=FUR, outline=OUTLINE, width=lw)
-    d.ellipse(b(60, 62, 90, 104), fill=FUR_LIGHT, outline=OUTLINE, width=lw)  # snout
-    d.ellipse(b(52, 30, 98, 44), fill=(196, 160, 112))  # darker crown
-    # eyes: dark patches
-    d.ellipse(b(52, 48, 70, 68), fill=DARK)
-    d.ellipse(b(80, 48, 98, 68), fill=DARK)
-    if pose == "happy":
-        d.arc(b(55, 54, 67, 66), 200, 340, fill=WHITE, width=lw)
-        d.arc(b(83, 54, 95, 66), 200, 340, fill=WHITE, width=lw)
-        d.arc(b(67, 92, 83, 103), 30, 150, fill=DARK, width=lw)  # smile
+    oval((16, 48, 40, 74), PATCH, outline=True)  # ears
+    oval((110, 48, 134, 74), PATCH, outline=True)
+    oval((24, 18, 126, 112), FUR, outline=True)
+    oval((52, 23, 98, 44), FUR_DARK)  # darker crown
+    oval((38, 52, 112, 106), FUR_LIGHT)  # pale face
+    oval((35, 48, 70, 85), PATCH)  # dark eye patches
+    oval((80, 48, 115, 85), PATCH)
+    # eyes
+    if pose == "happy" or blink:
+        start, end = (190, 350) if pose == "happy" else (10, 170)
+        ew = max(1, round(3 * k))
+        d.arc(bx(43, 58, 63, 76), start, end, fill=FUR_LIGHT, width=ew)
+        d.arc(bx(87, 58, 107, 76), start, end, fill=FUR_LIGHT, width=ew)
     else:
-        d.ellipse(b(58, 53, 65, 60), fill=WHITE)
-        d.ellipse(b(86, 53, 93, 60), fill=WHITE)
-    d.ellipse(b(70, 88, 80, 95), fill=DARK)  # nose
-    return img
+        for cx in (54, 96):
+            dot(cx, 66, 12, DARK)
+            dot(cx - 4, 61, 4.5, WHITE)  # big sparkle
+            dot(cx + 5, 71, 2, WHITE)  # small sparkle
+    # cheeks, nose, mouth
+    oval((28, 84, 46, 95), BLUSH)
+    oval((104, 84, 122, 95), BLUSH)
+    oval((66, 82, 84, 94), NOSE)
+    oval((70, 84, 76, 88), (150, 118, 104))
+    mw = max(1, round(2 * k))
+    if pose == "happy":
+        d.chord(bx(65, 92, 85, 108), 0, 180, fill=(170, 80, 70), outline=DARK, width=mw)
+    else:
+        d.arc(bx(66, 89, 75, 99), 10, 170, fill=DARK, width=mw)
+        d.arc(bx(75, 89, 84, 99), 10, 170, fill=DARK, width=mw)
+    for pts in raised:
+        limb(list(pts), 12)
+        dot(pts[-1][0], pts[-1][1] - 4, 8, FUR, outline=True)
+
+    small = img.resize((w, h), Image.Resampling.LANCZOS)
+    mask = small.getchannel("A").point(lambda a: 255 if a >= 128 else 0)
+    out = Image.new("RGB", (w, h), KEY)
+    out.paste(small.convert("RGB"), mask=mask)
+    return out
 
 
 # ------------------------------------------------------------------- texts
@@ -230,6 +274,9 @@ class _BuddyWindow:
         self.hiding = False
         self.hide_at: float | None = None
         self.shown_at = 0.0
+        self.pose = "stand"
+        self.meerkat_item = None
+        self.blinking = False
 
     def loop(self) -> None:
         self.root.after(50, self._poll)
@@ -290,7 +337,7 @@ class _BuddyWindow:
         w, h = self.size
         if level == 3:
             return (left + right - w) / 2, (top + bottom - h) / 2
-        return right - w - 16, bottom - h
+        return left + 16, bottom - h
 
     # ---- window
 
@@ -327,30 +374,28 @@ class _BuddyWindow:
     def _draw(self, pose: str, title: str, line: str, buttons: bool) -> None:
         c, s = self.canvas, self.scale
         c.delete("all")
-        bw = round(self.BUBBLE_W * s)
-        key = f"{pose}@{s}"
-        if key not in self.images:
-            self.images[key] = self.image_tk.PhotoImage(draw_meerkat(pose, s))
-        c.create_image(bw, 0, image=self.images[key], anchor="nw")
+        self.pose, self.blinking = pose, False
+        mw = round(MEERKAT_W * s)
+        self.meerkat_item = c.create_image(0, 0, image=self._image(pose), anchor="nw")
 
-        # speech bubble with a little tail pointing at the meerkat
-        x0, y0, x1 = round(6 * s), round(20 * s), bw - round(8 * s)
+        # speech bubble right of the meerkat, its tail pointing back at it
+        x0, y0, x1 = mw + round(8 * s), round(20 * s), self.size[0] - round(6 * s)
         y1 = round((132 if buttons else 100) * s)
         r = round(14 * s)
         _round_rect(c, x0, y0, x1, y1, r, fill="white", outline="#5c422c", width=2)
         ty = round(60 * s)
         c.create_polygon(
-            x1 - 1,
+            x0 + 1,
             ty - round(10 * s),
-            x1 + round(18 * s),
+            x0 - round(18 * s),
             ty + round(4 * s),
-            x1 - 1,
+            x0 + 1,
             ty + round(10 * s),
             fill="white",
             outline="#5c422c",
             width=2,
         )
-        c.create_line(x1 - 1, ty - round(9 * s), x1 - 1, ty + round(9 * s), fill="white", width=3)
+        c.create_line(x0 + 1, ty - round(9 * s), x0 + 1, ty + round(9 * s), fill="white", width=3)
         font = "Leelawadee UI" if sys.platform == "win32" else "TkDefaultFont"
         c.create_text(
             (x0 + x1) / 2,
@@ -378,6 +423,21 @@ class _BuddyWindow:
                 self._snooze,
                 font,
             )
+
+    def _image(self, pose: str, blink: bool = False):
+        key = f"{pose}@{self.scale}{'-blink' if blink else ''}"
+        if key not in self.images:
+            self.images[key] = self.image_tk.PhotoImage(draw_meerkat(pose, self.scale, blink))
+        return self.images[key]
+
+    def _blink(self) -> None:
+        """Blink for 0.15 s every 4 s (not in the happy pose, its eyes are closed)."""
+        if self.pose == "happy" or self.meerkat_item is None:
+            return
+        blink = (time.monotonic() - self.shown_at) % 4.0 > 3.85
+        if blink != self.blinking:
+            self.blinking = blink
+            self.canvas.itemconfig(self.meerkat_item, image=self._image(self.pose, blink))
 
     def _button(self, x0, y, x1, text, action, font) -> None:
         c, s = self.canvas, self.scale
@@ -432,6 +492,7 @@ class _BuddyWindow:
                 tx, ty = self.target
                 self.pos = (x + (tx - x) * 0.18, y + (ty - y) * 0.18)
                 self._place()
+                self._blink()
                 if self.hide_at is not None and time.monotonic() >= self.hide_at:
                     self.hide_at = None
                     self._hide()
