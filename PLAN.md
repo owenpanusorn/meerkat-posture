@@ -247,8 +247,8 @@ meerkat-posture/
 - [ ] README: ภาพหน้าจอ, วิธีติดตั้ง, **หัวข้อ Privacy อธิบายข้อ 2 ชัด ๆ**
 - [x] `THIRD_PARTY_NOTICES.md`: MediaPipe, OpenCV, pystray, desktop-notifier, โมเดล
 - [ ] หน้าตั้งค่าแบบ GUI (พิจารณา PySide6)
-- [ ] เริ่มอัตโนมัติตอนเปิดเครื่อง (ตัวเลือก)
-- [ ] แพ็กด้วย PyInstaller: Windows `.exe`, macOS `.app`
+- [x] เริ่มอัตโนมัติตอนเปิดเครื่อง (ตัวเลือก)
+- [ ] แพ็กด้วย PyInstaller: Windows `.exe` ✅, macOS `.app`
 - [ ] GitHub Actions: lint + test + build
 - [ ] เช็กชื่อ `meerkat-posture` บน GitHub / PyPI ก่อน publish
 

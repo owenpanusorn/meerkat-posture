@@ -14,6 +14,9 @@ def main() -> int:
         path = ICONS_DIR / f"meerkat_{state}.png"
         draw_icon(state, 256).save(path)
         print(f"wrote {path}")
+    ico = ICONS_DIR / "meerkat.ico"  # Windows .exe icon
+    draw_icon("green", 256).save(ico, sizes=[(16, 16), (32, 32), (48, 48), (64, 64), (256, 256)])
+    print(f"wrote {ico}")
     return 0
 
 

@@ -22,7 +22,7 @@ from pathlib import Path
 
 import numpy as np
 
-from meerkat import calibration, config, notifier, storage
+from meerkat import autostart, calibration, config, notifier, storage
 from meerkat.camera import Camera, CameraError
 from meerkat.debug_view import DebugWindow
 from meerkat.detector import Detector
@@ -183,10 +183,33 @@ class App:
     def toggle_debug(self) -> None:
         self.debug_enabled = not self.debug_enabled
 
+    @property
+    def autostart_supported(self) -> bool:
+        return autostart.supported()
+
+    @property
+    def autostart_enabled(self) -> bool:
+        return autostart.is_enabled()
+
+    def toggle_autostart(self) -> None:
+        on = autostart.set_enabled(not autostart.is_enabled())
+        self.notifier.send(
+            "เปิดอัตโนมัติแล้ว" if on else "ปิดการเปิดอัตโนมัติแล้ว",
+            "Meerkat จะเปิดเองทุกครั้งที่เข้า Windows" if on else "ต้องเปิด Meerkat เองเมื่อต้องการใช้",
+        )
+        self.tray.refresh()
+
+    def open_data_folder(self) -> None:
+        self._open_path(config.user_config_dir())
+
     def open_config(self) -> None:
         path = self.config_path
         if not path.exists():
             config.save(self.cfg, path)
+        self._open_path(path)
+
+    @staticmethod
+    def _open_path(path: Path) -> None:
         try:
             if sys.platform == "win32":
                 os.startfile(path)  # type: ignore[attr-defined]

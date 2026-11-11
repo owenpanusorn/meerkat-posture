@@ -56,7 +56,26 @@ seconds (calibration). After that it lives in the system tray:
 - right-click for: today's stats, pause, snooze the stand-up reminder, calibrate,
   choose camera, record session, debug window, open config, quit
 
-Ctrl+C in the terminal also quits.
+Ctrl+C in the terminal also quits. Only one copy runs at a time.
+
+## Windows app (.exe)
+
+Build a folder with `Meerkat.exe` (no Python needed to run it, no terminal window):
+
+```sh
+uv run python scripts/download_models.py   # if not done yet
+uv run pyinstaller meerkat.spec --noconfirm
+```
+
+The result is `dist/Meerkat/` (about 300 MB, because MediaPipe and OpenCV are inside).
+Move the whole folder wherever you like and run `Meerkat.exe`. Then tick
+**"เปิดอัตโนมัติตอนเข้า Windows"** in the tray menu to start it at sign-in (per-user, no admin).
+If you move the folder later, toggle that option off and on again.
+
+The exe is not code-signed, so Windows SmartScreen may warn the first time:
+"More info" → "Run anyway". Logs go to `meerkat.log` in the data folder (tray menu
+"เปิดโฟลเดอร์ข้อมูล / log"). `Meerkat.exe --selftest` checks that models, icons and sounds
+load, without using the camera.
 
 ## Settings
 

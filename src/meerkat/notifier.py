@@ -13,12 +13,13 @@ import sys
 import threading
 from pathlib import Path
 
+from meerkat import paths
+
 log = logging.getLogger(__name__)
 
 APP_NAME = "Meerkat"
-ASSETS = Path(__file__).resolve().parents[2] / "assets"
-ICON_PATH = ASSETS / "icons" / "meerkat_green.png"
-SOUNDS_DIR = ASSETS / "sounds"
+ICON_PATH = paths.ICONS_DIR / "meerkat_green.png"
+SOUNDS_DIR = paths.SOUNDS_DIR
 
 # Sound kinds. Info messages (calibration, settings) have no sound.
 POSTURE = "posture"

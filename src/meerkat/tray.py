@@ -7,12 +7,13 @@ to ``assets/icons/``; the tray uses those files when present.
 from __future__ import annotations
 
 from collections.abc import Callable
-from pathlib import Path
 from typing import Protocol
 
 from PIL import Image, ImageDraw
 
-ICONS_DIR = Path(__file__).resolve().parents[2] / "assets" / "icons"
+from meerkat import paths
+
+ICONS_DIR = paths.ICONS_DIR
 ICON_STATES = ("green", "yellow", "red", "sleep")
 CAMERA_CHOICES = (0, 1, 2, 3)
 _BG = {
@@ -65,7 +66,11 @@ class Controller(Protocol):
     recording: bool
     camera_index: int
     phone_break_active: bool
+    autostart_supported: bool
+    autostart_enabled: bool
 
+    def toggle_autostart(self) -> None: ...
+    def open_data_folder(self) -> None: ...
     def phone_break_options(self) -> list[int]: ...
     def start_phone_break(self, minutes: int) -> None: ...
     def end_phone_break(self) -> None: ...
@@ -162,7 +167,14 @@ class Tray:
                 act(ctl.toggle_debug),
                 checked=lambda item: ctl.debug_enabled,
             ),
+            Item(
+                "เปิดอัตโนมัติตอนเข้า Windows",
+                act(ctl.toggle_autostart),
+                checked=lambda item: ctl.autostart_enabled,
+                visible=lambda item: ctl.autostart_supported,
+            ),
             Item("เปิดไฟล์ config", act(ctl.open_config)),
+            Item("เปิดโฟลเดอร์ข้อมูล / log", act(ctl.open_data_folder)),
             Item("ออก", act(ctl.quit)),
         )
 

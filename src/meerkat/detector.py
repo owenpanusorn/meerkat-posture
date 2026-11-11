@@ -11,7 +11,9 @@ from pathlib import Path
 
 import numpy as np
 
-DEFAULT_MODELS_DIR = Path(__file__).resolve().parents[2] / "models"
+from meerkat import paths
+
+DEFAULT_MODELS_DIR = paths.MODELS_DIR
 FACE_MODEL = "face_landmarker.task"
 POSE_MODEL = "pose_landmarker_lite.task"
 
