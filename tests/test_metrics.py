@@ -69,6 +69,12 @@ def test_turn_right_30_gives_yaw_30():
     assert m.head_roll == pytest.approx(0, abs=0.01)
 
 
+def test_looking_down_gives_negative_pitch():
+    # MediaPipe's matrix reports looking down 20 deg as +20 rotation about x.
+    m = compute_metrics(make_landmarks(pitch=20))
+    assert m.head_pitch == pytest.approx(-20, abs=0.01)
+
+
 def test_no_face_means_not_present():
     lm = Landmarks(W, H, 0)
     assert compute_metrics(lm) == PostureMetrics(present=False)

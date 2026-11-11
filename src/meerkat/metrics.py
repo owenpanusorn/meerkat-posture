@@ -3,10 +3,10 @@
 No camera, no UI, no MediaPipe import, so everything here is unit-testable with
 fake numbers.
 
-Angle conventions (degrees). The face model's axes are x = image right,
-y = up, z = toward the camera:
+Angle conventions (degrees):
     head_yaw    + = nose turns toward image right
-    head_pitch  + = nose tilts up (chin up), - = looking down
+    head_pitch  + = chin up (looking up), - = looking down. MediaPipe's matrix gives
+                    the opposite sign, so it is flipped (PITCH_SIGN), checked on a real webcam.
     head_roll   + = head rotates counter-clockwise as seen in the image
     shoulder_tilt + = the shoulder on the image's right side is lower
 
@@ -33,6 +33,9 @@ POSE_LEFT_SHOULDER = 11
 POSE_RIGHT_SHOULDER = 12
 
 MIN_VISIBILITY = 0.5
+
+# MediaPipe's facial transformation matrix reports looking down as positive pitch.
+PITCH_SIGN = -1.0
 
 
 @dataclass(frozen=True)
@@ -83,6 +86,7 @@ def compute_metrics(lm: Landmarks) -> PostureMetrics:
     yaw = pitch = roll = None
     if lm.face_matrix is not None:
         yaw, pitch, roll = matrix_to_euler(lm.face_matrix)
+        pitch *= PITCH_SIGN
 
     eye_a = _px(lm.face, FACE_EYE_OUTER_A, w, h)
     eye_b = _px(lm.face, FACE_EYE_OUTER_B, w, h)
