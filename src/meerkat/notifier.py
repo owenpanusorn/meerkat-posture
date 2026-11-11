@@ -36,31 +36,41 @@ def break_message(minutes: int) -> tuple[str, str]:
 
 
 class Notifier:
-    def __init__(self, enabled: bool = True) -> None:
+    """Info messages (calibration, settings) are always silent. Posture alerts and
+    stand-up reminders play the system's default notification sound when enabled.
+    The OS mutes it on its own during Do Not Disturb / Focus."""
+
+    def __init__(
+        self, enabled: bool = True, sound_posture: bool = True, sound_break: bool = True
+    ) -> None:
         self.enabled = enabled
-        self._q: queue.Queue[tuple[str, str] | None] = queue.Queue()
+        self.sound_posture = sound_posture
+        self.sound_break = sound_break
+        self._q: queue.Queue[tuple[str, str, bool] | None] = queue.Queue()
         self._thread = threading.Thread(target=self._run, name="notifier", daemon=True)
         self._thread.start()
 
-    def send(self, title: str, message: str) -> None:
+    def send(self, title: str, message: str, sound: bool = False) -> None:
         if self.enabled:
-            self._q.put((title, message))
+            self._q.put((title, message, sound))
 
     def alert(self, rule: str) -> None:
         title, message = RULE_MESSAGES.get(rule, (rule, ""))
-        self.send(title, message)
+        self.send(title, message, sound=self.sound_posture)
 
     def break_reminder(self, minutes: int) -> None:
-        self.send(*break_message(minutes))
+        self.send(*break_message(minutes), sound=self.sound_break)
 
     def close(self) -> None:
         self._q.put(None)
         self._thread.join(timeout=2)
 
     def _run(self) -> None:
+        default_sound = None
         try:
-            from desktop_notifier import DesktopNotifierSync, Icon
+            from desktop_notifier import DEFAULT_SOUND, DesktopNotifierSync, Icon
 
+            default_sound = DEFAULT_SOUND
             kwargs = {"app_name": APP_NAME}
             if ICON_PATH.exists():
                 kwargs["app_icon"] = Icon(path=ICON_PATH)
@@ -70,11 +80,11 @@ class Notifier:
             notifier = None
 
         while (item := self._q.get()) is not None:
-            title, message = item
-            log.info("notify: %s / %s", title, message)
+            title, message, sound = item
+            log.info("notify%s: %s / %s", " (sound)" if sound else "", title, message)
             if notifier is None:
                 continue
             try:
-                notifier.send(title=title, message=message)
+                notifier.send(title=title, message=message, sound=default_sound if sound else None)
             except Exception:
                 log.exception("failed to show notification")

@@ -60,6 +60,8 @@ class AlertConfig:
     # the last head angles for up to this long before treating it as unknown.
     face_lost_hold_s: float = 120.0
     notifications: bool = True
+    sound_posture: bool = True  # play the system notification sound for posture alerts
+    sound_break: bool = True  # ... and for stand-up reminders
 
 
 @dataclass
