@@ -94,7 +94,7 @@ class Aggregator:
         self._rows, self._start = [], None
         t = min(t, self._last + self.MAX_GAP_S)
 
-        present = [m for m, _, _ in rows if m.present]
+        present = [m for m, _, _ in rows if m.person_present]
         avg: dict[str, float | None] = {}
         for name in METRIC_FIELDS:
             vals = [getattr(m, name) for m in present if getattr(m, name) is not None]

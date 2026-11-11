@@ -87,6 +87,7 @@ class App:
     # ---------------------------------------------------------------- lifecycle
 
     def run(self) -> int:
+        self._install_ctrl_c_handler()
         try:
             self.tray.run(setup=self._worker.start)
         finally:
@@ -95,6 +96,36 @@ class App:
                 self._worker.join(timeout=5)
             self.notifier.close()
         return 0
+
+    def _install_ctrl_c_handler(self) -> None:
+        """Make Ctrl+C in the terminal quit cleanly.
+
+        The tray loop blocks the main thread inside a native call, so Python's own
+        SIGINT handling never gets a chance to run. On Windows we register a console
+        control handler, which Windows calls on its own thread.
+        """
+        if sys.platform != "win32":
+            import signal
+
+            signal.signal(signal.SIGINT, lambda *_: self.quit())
+            return
+
+        import ctypes
+
+        CTRL_CLOSE_EVENT = 2
+
+        @ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_uint)
+        def handler(event: int) -> bool:
+            log.info("console event %d: quitting", event)
+            self.quit()
+            if event == CTRL_CLOSE_EVENT:
+                # Terminal window closing: give the worker a moment to release the camera.
+                self._worker.join(timeout=3)
+            return True
+
+        self._console_handler = handler  # keep a reference so it isn't garbage collected
+        if not ctypes.windll.kernel32.SetConsoleCtrlHandler(handler, True):
+            log.warning("could not install Ctrl+C handler")
 
     # ------------------------------------------------- tray Controller interface
 
@@ -300,7 +331,7 @@ class App:
                 self._event("alert", rule)
 
         was_sitting = self.sitting.active
-        if self.sitting.update(now, m.present):
+        if self.sitting.update(now, m.person_present):
             self.notifier.break_reminder(int(self.sitting.sitting_s(now) // 60))
             self._event("break_reminder")
         if was_sitting and not self.sitting.active:
@@ -528,7 +559,7 @@ class App:
         if not self.zones:
             return "ยังไม่ได้ Calibrate"
         minutes = int(self.sitting.sitting_s(now) // 60)
-        if not m.present:
+        if not m.person_present:
             return "ไม่เห็นใครหน้าจอ"
         text = f"นั่งมาแล้ว {minutes} นาที"
         if self.sitting.snoozed(now):

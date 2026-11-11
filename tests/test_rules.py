@@ -126,6 +126,33 @@ def test_leaving_frame_resets():
     assert sim.last.status == State.WARN
 
 
+FACE_LOST_BODY_SEEN = PostureMetrics(
+    present=False, shoulder_tilt=0.0, shoulder_width=0.4, neck_drop=0.6
+)
+
+
+def test_head_bowed_until_face_is_lost_still_alerts():
+    # Real case: head goes down, then the face disappears but the shoulders stay in view.
+    sim = Sim().hold(GOOD, 5).hold(HEAD_DOWN, 10).hold(FACE_LOST_BODY_SEEN, 25)
+    assert sim.names() == ["head_down"]
+
+
+def test_face_and_body_gone_resets():
+    sim = Sim().hold(HEAD_DOWN, 20).hold(AWAY, 1).hold(HEAD_DOWN, 20)
+    assert sim.names() == []
+
+
+def test_face_lost_hold_expires():
+    sim = Sim(face_lost_hold_s=5).hold(HEAD_DOWN, 10).hold(FACE_LOST_BODY_SEEN, 30)
+    assert sim.names() == []
+    assert sim.last.status == State.OK
+
+
+def test_face_lost_without_any_face_first_is_ok():
+    sim = Sim().hold(FACE_LOST_BODY_SEEN, 120)
+    assert sim.names() == []
+
+
 def test_missing_values_never_count_as_bad():
     no_shoulders = replace(GOOD, shoulder_tilt=None, shoulder_width=None, neck_drop=None)
     sim = Sim().hold(no_shoulders, 120)

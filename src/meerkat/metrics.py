@@ -49,6 +49,15 @@ class PostureMetrics:
     shoulder_width: float | None = None  # shoulder distance / frame width
     neck_drop: float | None = None  # (shoulder y - ear y) / shoulder distance
 
+    @property
+    def body_visible(self) -> bool:
+        return self.shoulder_width is not None
+
+    @property
+    def person_present(self) -> bool:
+        """Someone is at the desk: face seen, or at least their shoulders."""
+        return self.present or self.body_visible
+
 
 def matrix_to_euler(m: np.ndarray) -> tuple[float, float, float]:
     """Return (yaw, pitch, roll) in degrees for R = Ry(yaw) @ Rx(pitch) @ Rz(roll)."""
@@ -79,10 +88,15 @@ def _px(points: np.ndarray, idx: int, w: int, h: int) -> np.ndarray:
 
 
 def compute_metrics(lm: Landmarks) -> PostureMetrics:
-    if lm.face is None:
-        return PostureMetrics(present=False)
-
+    """``present`` means a face was found. Shoulder values are filled in from the body
+    pose even without a face (e.g. head bowed so far the face is hidden)."""
     w, h = lm.width, lm.height
+    tilt, width, drop = _shoulder_metrics(lm)
+    if lm.face is None:
+        return PostureMetrics(
+            present=False, shoulder_tilt=tilt, shoulder_width=width, neck_drop=drop
+        )
+
     yaw = pitch = roll = None
     if lm.face_matrix is not None:
         yaw, pitch, roll = matrix_to_euler(lm.face_matrix)
@@ -92,6 +106,20 @@ def compute_metrics(lm: Landmarks) -> PostureMetrics:
     eye_b = _px(lm.face, FACE_EYE_OUTER_B, w, h)
     face_scale = float(np.linalg.norm(eye_a - eye_b)) / w
 
+    return PostureMetrics(
+        present=True,
+        head_yaw=yaw,
+        head_pitch=pitch,
+        head_roll=roll,
+        face_scale=face_scale,
+        shoulder_tilt=tilt,
+        shoulder_width=width,
+        neck_drop=drop,
+    )
+
+
+def _shoulder_metrics(lm: Landmarks) -> tuple[float | None, float | None, float | None]:
+    w, h = lm.width, lm.height
     tilt = width = drop = None
     pose = lm.pose
     if pose is not None and min(pose[POSE_LEFT_SHOULDER, 3], pose[POSE_RIGHT_SHOULDER, 3]) >= (
@@ -109,17 +137,7 @@ def compute_metrics(lm: Landmarks) -> PostureMetrics:
                 ear_y = (pose[POSE_LEFT_EAR, 1] + pose[POSE_RIGHT_EAR, 1]) / 2 * h
                 shoulder_y = (s1[1] + s2[1]) / 2
                 drop = (shoulder_y - ear_y) / dist
-
-    return PostureMetrics(
-        present=True,
-        head_yaw=yaw,
-        head_pitch=pitch,
-        head_roll=roll,
-        face_scale=face_scale,
-        shoulder_tilt=tilt,
-        shoulder_width=width,
-        neck_drop=drop,
-    )
+    return tilt, width, drop
 
 
 _NUMERIC_FIELDS = [f.name for f in fields(PostureMetrics) if f.name != "present"]
@@ -145,8 +163,13 @@ class Smoother:
             vals = [getattr(s, name) for _, s in self._buf if getattr(s, name) is not None]
             out[name] = sum(vals) / len(vals) if vals else None
         if not m.present:
-            # Don't show stale head values once the person has left the frame.
-            return PostureMetrics(present=False)
+            # No face: don't show stale head values, but keep the body that is visible now.
+            return PostureMetrics(
+                present=False,
+                shoulder_tilt=m.shoulder_tilt,
+                shoulder_width=m.shoulder_width,
+                neck_drop=m.neck_drop,
+            )
         return PostureMetrics(present=True, **out)
 
     def reset(self) -> None:

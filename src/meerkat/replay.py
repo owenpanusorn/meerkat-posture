@@ -42,7 +42,7 @@ def replay(
         ev = rules.update(t, m, zones)
         events += [ReplayEvent(t, "alert", rule) for rule in ev.alerts]
         was_active = sitting.active
-        if sitting.update(t, m.present):
+        if sitting.update(t, m.person_present):
             events.append(ReplayEvent(t, "break_reminder"))
         if was_active and not sitting.active:
             events.append(ReplayEvent(t, "stood_up"))

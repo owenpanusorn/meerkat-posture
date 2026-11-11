@@ -80,6 +80,22 @@ def test_no_face_means_not_present():
     assert compute_metrics(lm) == PostureMetrics(present=False)
 
 
+def test_no_face_but_body_visible_keeps_shoulders():
+    lm = make_landmarks()
+    lm = Landmarks(lm.width, lm.height, 0, None, None, lm.pose)
+    m = compute_metrics(lm)
+    assert not m.present and m.body_visible and m.person_present
+    assert m.head_pitch is None
+    assert m.shoulder_width == pytest.approx(0.4)
+
+
+def test_smoother_keeps_body_when_face_lost():
+    s = Smoother()
+    s.update(0.0, PostureMetrics(True, head_yaw=10.0, shoulder_width=0.4))
+    out = s.update(0.2, PostureMetrics(False, shoulder_width=0.41))
+    assert not out.present and out.head_yaw is None and out.shoulder_width == 0.41
+
+
 def test_face_scale_grows_when_leaning_in():
     near = compute_metrics(make_landmarks(eye_gap=0.15)).face_scale
     far = compute_metrics(make_landmarks(eye_gap=0.10)).face_scale

@@ -56,6 +56,9 @@ class AlertConfig:
     global_cooldown_s: float = 60.0  # min gap between any two alerts
     recover_s: float = 3.0  # good posture this long to clear an ALERT
     hysteresis: float = 0.8  # must drop below 80% of the threshold to count as good
+    # Face lost but shoulders still visible (head bowed / turned away): keep judging with
+    # the last head angles for up to this long before treating it as unknown.
+    face_lost_hold_s: float = 120.0
     notifications: bool = True
 
 

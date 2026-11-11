@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from enum import IntEnum
 
 from meerkat.calibration import nearest_zone
@@ -100,16 +100,37 @@ class RulesEngine:
         self.alerts = alerts
         self._tracks = {name: _Track() for name in RULE_ORDER}
         self._last_global = -math.inf
+        self._last_face: PostureMetrics | None = None
+        self._last_face_t = -math.inf
 
     def reset(self) -> None:
         """Forget current episodes (keeps cooldown history)."""
         for tr in self._tracks.values():
             tr.state, tr.good_since, tr.notified = State.OK, None, False
+        self._last_face = None
 
     def update(
         self, t: float, m: PostureMetrics, zones: Mapping[str, PostureMetrics]
     ) -> Evaluation:
-        if not m.present or not zones:
+        if not zones:
+            self.reset()
+            return Evaluation(State.OK)
+        if m.present:
+            self._last_face, self._last_face_t = m, t
+        elif (
+            m.body_visible
+            and self._last_face is not None
+            and t - self._last_face_t <= self.alerts.face_lost_hold_s
+        ):
+            # Face hidden but the person is still here, usually because the head is bowed
+            # too far for face tracking. Keep judging with the last head angles seen.
+            m = replace(
+                self._last_face,
+                shoulder_tilt=m.shoulder_tilt,
+                shoulder_width=m.shoulder_width,
+                neck_drop=m.neck_drop,
+            )
+        else:
             self.reset()
             return Evaluation(State.OK)
 
