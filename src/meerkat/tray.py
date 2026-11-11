@@ -14,6 +14,7 @@ from PIL import Image, ImageDraw
 
 ICONS_DIR = Path(__file__).resolve().parents[2] / "assets" / "icons"
 ICON_STATES = ("green", "yellow", "red", "sleep")
+CAMERA_CHOICES = (0, 1, 2, 3)
 _BG = {
     "green": (46, 158, 68),
     "yellow": (230, 176, 0),
@@ -61,9 +62,14 @@ class Controller(Protocol):
 
     paused: bool
     debug_enabled: bool
+    recording: bool
+    camera_index: int
 
     def status_text(self) -> str: ...
+    def stats_lines(self) -> list[str]: ...
     def has_zone(self, zone: str) -> bool: ...
+    def select_camera(self, index: int) -> None: ...
+    def toggle_recording(self) -> None: ...
     def pause(self, minutes: float | None) -> None: ...
     def resume(self) -> None: ...
     def snooze_sitting(self) -> None: ...
@@ -97,12 +103,25 @@ class Tray:
             Item("1 ชั่วโมง", act(lambda: ctl.pause(60))),
             Item("จนกว่าจะกดเปิด", act(lambda: ctl.pause(None))),
         )
+        stats_menu = Menu(lambda: [Item(line, None, enabled=False) for line in ctl.stats_lines()])
+        camera_menu = Menu(
+            *(
+                Item(
+                    f"กล้อง {i}",
+                    act(lambda i=i: ctl.select_camera(i)),
+                    checked=lambda item, i=i: ctl.camera_index == i,
+                    radio=True,
+                )
+                for i in CAMERA_CHOICES
+            )
+        )
         return Menu(
             Item(lambda item: ctl.status_text(), None, enabled=False),
+            Item("สถิติวันนี้", stats_menu),
             Menu.SEPARATOR,
             Item("หยุดชั่วคราว (ปิดกล้อง)", pause_menu, visible=lambda item: not ctl.paused),
             Item("เปิดต่อ", act(ctl.resume), visible=lambda item: ctl.paused),
-            Item("เลื่อนเตือนลุก 10 นาที", act(ctl.snooze_sitting)),
+            Item("เลื่อนเตือนลุก", act(ctl.snooze_sitting)),
             Menu.SEPARATOR,
             Item("Calibrate จอหลัก", act(lambda: ctl.calibrate("main"))),
             Item("Calibrate จอที่สอง", act(lambda: ctl.calibrate("second"))),
@@ -111,7 +130,13 @@ class Tray:
                 act(lambda: ctl.remove_zone("second")),
                 visible=lambda item: ctl.has_zone("second"),
             ),
+            Item("เลือกกล้อง", camera_menu),
             Menu.SEPARATOR,
+            Item(
+                "บันทึก session (ตัวเลขเท่านั้น)",
+                act(ctl.toggle_recording),
+                checked=lambda item: ctl.recording,
+            ),
             Item(
                 "หน้าต่าง debug",
                 act(ctl.toggle_debug),

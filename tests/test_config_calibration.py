@@ -39,6 +39,12 @@ def test_partial_file_uses_defaults_and_ignores_junk(tmp_path):
     assert cfg.alerts.hysteresis == 0.8
 
 
+def test_load_tolerates_utf8_bom(tmp_path):
+    path = tmp_path / "config.toml"
+    path.write_bytes(b"\xef\xbb\xbf[camera]\nindex = 1\n")
+    assert config.load(path).camera.index == 1
+
+
 def test_missing_file_gives_defaults(tmp_path):
     assert config.load(tmp_path / "none.toml") == config.Config()
 

@@ -2,10 +2,10 @@
 
 Threads:
     main     - tray icon (pystray needs the main thread on macOS)
-    worker   - camera -> detector -> metrics -> rules / sitting -> notifier + tray state
+    worker   - camera -> detector -> metrics -> rules / sitting -> notifier, storage, tray
     notifier - delivers desktop notifications
 
-Tray callbacks never touch the camera. They queue commands for the worker.
+Tray callbacks never touch the camera or the database. They queue commands for the worker.
 """
 
 from __future__ import annotations
@@ -20,7 +20,9 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
-from meerkat import calibration, config
+import numpy as np
+
+from meerkat import calibration, config, storage
 from meerkat.camera import Camera, CameraError
 from meerkat.debug_view import DebugWindow
 from meerkat.detector import Detector
@@ -35,7 +37,15 @@ log = logging.getLogger(__name__)
 CAL_COUNTDOWN_S = 5.0
 CONFIG_CHECK_S = 5.0
 MENU_REFRESH_S = 5.0
+STATS_REFRESH_S = 30.0
 CAMERA_RETRY_S = 10.0
+
+# Hourly zone check (PLAN.md section 8): side zone > 60% of the last hour -> suggest moving.
+ZONE_CHECK_EVERY_S = 600.0
+ZONE_WINDOW_S = 3600.0
+ZONE_MIN_PRESENT_S = 1800.0
+ZONE_SIDE_SHARE = 0.6
+
 _ICON_FOR_STATE = {State.OK: "green", State.WARN: "yellow", State.ALERT: "red"}
 
 
@@ -64,9 +74,11 @@ class App:
 
         self.paused = False
         self.debug_enabled = False
+        self.recording = False
         self._pause_until: float | None = None
         self._cal: _Calibration | None = None
         self._status = "กำลังเปิดกล้อง..."
+        self._stats_lines: list[str] = ["ยังไม่มีข้อมูล"]
         self._cmds: queue.Queue[tuple] = queue.Queue()
         self._stop = threading.Event()
         self._worker = threading.Thread(target=self._run_worker, name="worker", daemon=True)
@@ -86,8 +98,15 @@ class App:
 
     # ------------------------------------------------- tray Controller interface
 
+    @property
+    def camera_index(self) -> int:
+        return self.cfg.camera.index
+
     def status_text(self) -> str:
         return self._status
+
+    def stats_lines(self) -> list[str]:
+        return list(self._stats_lines)
 
     def has_zone(self, zone: str) -> bool:
         return zone in self.zones
@@ -106,6 +125,12 @@ class App:
 
     def remove_zone(self, zone: str) -> None:
         self._cmds.put(("remove_zone", zone))
+
+    def select_camera(self, index: int) -> None:
+        self._cmds.put(("camera", index))
+
+    def toggle_recording(self) -> None:
+        self._cmds.put(("recording",))
 
     def toggle_debug(self) -> None:
         self.debug_enabled = not self.debug_enabled
@@ -132,18 +157,32 @@ class App:
 
     def _run_worker(self) -> None:
         try:
-            detector = Detector()
+            detector = Detector(min_confidence=self.cfg.camera.min_confidence)
         except Exception as e:
             log.exception("cannot load models")
             self.notifier.send("Meerkat เปิดไม่ได้", str(e))
             self.quit()
             return
 
-        cam: Camera | None = None
+        self.db: storage.Storage | None = None
+        if self.cfg.storage.enabled:
+            try:
+                self.db = storage.Storage()
+            except Exception:
+                log.exception("storage disabled: cannot open database")
+        self.aggregator = storage.Aggregator(self.cfg.storage.sample_period_s)
+        self.recorder: storage.SessionRecorder | None = None
+        if self.cfg.storage.record_sessions:
+            self._start_recording()
+        self._last_zone_tip = -float("inf")
+
+        self.cam: Camera | None = None
         window = DebugWindow()
-        next_camera_try = 0.0
+        self._next_camera_try = 0.0
         next_config_check = time.monotonic() + CONFIG_CHECK_S
         next_menu_refresh = 0.0
+        next_stats = 0.0
+        next_zone_check = time.monotonic() + ZONE_CHECK_EVERY_S
         bad_reads = 0
 
         if calibration.MAIN not in self.zones:
@@ -156,9 +195,20 @@ class App:
 
                 if now >= next_config_check:
                     next_config_check = now + CONFIG_CHECK_S
-                    if self._reload_config_if_changed() and cam is not None:
-                        cam.release()  # pick up camera index / fps changes
-                        cam = None
+                    if self._reload_config_if_changed():
+                        self._close_camera()  # pick up camera index / fps changes
+
+                if now >= next_stats:
+                    next_stats = now + STATS_REFRESH_S
+                    self._refresh_stats()
+
+                if now >= next_zone_check:
+                    next_zone_check = now + ZONE_CHECK_EVERY_S
+                    self._check_zone_usage(now)
+
+                if now >= next_menu_refresh:
+                    next_menu_refresh = now + MENU_REFRESH_S
+                    self.tray.refresh()
 
                 if self._pause_until is not None and now >= self._pause_until:
                     self._resume()
@@ -167,62 +217,79 @@ class App:
                     window.close()
 
                 if self.paused:
-                    if cam is not None:
-                        cam.release()  # really turn the camera off
-                        cam = None
+                    self._close_camera()  # really turn the camera off
                     self._set_status(self._paused_text(), "sleep")
                     self._stop.wait(0.5)
                     continue
 
-                if cam is None:
-                    if now < next_camera_try:
-                        self._stop.wait(0.5)
-                        continue
-                    cam = Camera(self.cfg.camera.index, self.cfg.camera.fps)
-                    try:
-                        cam.open()
-                        bad_reads = 0
-                    except CameraError:
-                        log.warning("camera %d not available", self.cfg.camera.index)
-                        self._set_status("เปิดกล้องไม่ได้ จะลองใหม่", "sleep")
-                        cam = None
-                        next_camera_try = now + CAMERA_RETRY_S
-                        continue
+                if self.cam is None and not self._open_camera(now):
+                    self._stop.wait(0.5)
+                    continue
 
-                frame = cam.read()
+                frame = self.cam.read()
                 if frame is None:
                     bad_reads += 1
                     if bad_reads >= 10:
-                        cam.release()
-                        cam = None
-                        next_camera_try = time.monotonic() + CAMERA_RETRY_S
+                        self._close_camera()
+                        self._next_camera_try = time.monotonic() + CAMERA_RETRY_S
                     continue
                 bad_reads = 0
 
                 now = time.monotonic()
+                too_dark = float(np.mean(frame)) < self.cfg.camera.min_brightness
                 lm = detector.detect(frame, int(now * 1000))
                 raw = compute_metrics(lm)
                 m = self.smoother.update(now, raw)
-                ev = self._evaluate(now, raw, m)
+                if too_dark:
+                    # Can't judge posture reliably: don't alert, don't count as absent.
+                    ev = Evaluation(State.OK)
+                    self._set_status("แสงน้อยเกินไป มองไม่ชัด", "green")
+                else:
+                    ev = self._evaluate(now, raw, m)
 
-                if self.debug_enabled and not window.show(frame, lm, m, self._debug_lines(ev)):
-                    self.debug_enabled = False
+                if self.debug_enabled:
+                    extra = self._debug_lines(ev) + (["too dark: skipped"] if too_dark else [])
+                    if not window.show(frame, lm, m, extra):
+                        self.debug_enabled = False
                 del frame, lm  # frames are never kept
-
-                if now >= next_menu_refresh:
-                    next_menu_refresh = now + MENU_REFRESH_S
-                    self.tray.refresh()
         except Exception:
             log.exception("worker crashed")
             self.notifier.send("Meerkat หยุดทำงาน", "เกิดข้อผิดพลาด ดูรายละเอียดใน terminal")
             self.quit()
         finally:
             window.close()
-            if cam is not None:
-                cam.release()
+            self._close_camera()
             detector.close()
+            self._stop_recording()
+            if self.db is not None:
+                if (last := self.aggregator.flush(time.time())) is not None:
+                    self.db.add_sample(last)
+                self.db.close()
+
+    def _open_camera(self, now: float) -> bool:
+        if now < self._next_camera_try:
+            return False
+        cam = Camera(self.cfg.camera.index, self.cfg.camera.fps)
+        try:
+            cam.open()
+        except CameraError:
+            log.warning("camera %d not available", self.cfg.camera.index)
+            self._set_status(f"เปิดกล้อง {self.cfg.camera.index} ไม่ได้ จะลองใหม่", "sleep")
+            self._next_camera_try = now + CAMERA_RETRY_S
+            return False
+        self.cam = cam
+        return True
+
+    def _close_camera(self) -> None:
+        if self.cam is not None:
+            self.cam.release()
+            self.cam = None
+            self.smoother.reset()
 
     def _evaluate(self, now: float, raw: PostureMetrics, m: PostureMetrics) -> Evaluation:
+        if self.recorder is not None:
+            self.recorder.write(now, raw)
+
         if self._cal is not None:
             self._calibration_step(now, raw)
             ev = Evaluation(State.OK)
@@ -230,12 +297,25 @@ class App:
             ev = self.rules.update(now, m, self.zones)
             for rule in ev.alerts:
                 self.notifier.alert(rule)
+                self._event("alert", rule)
 
+        was_sitting = self.sitting.active
         if self.sitting.update(now, m.present):
             self.notifier.break_reminder(int(self.sitting.sitting_s(now) // 60))
+            self._event("break_reminder")
+        if was_sitting and not self.sitting.active:
+            self._event("stood_up")
+
+        summary = self.aggregator.add(time.time(), m, ev.zone, ev.status)
+        if summary is not None and self.db is not None:
+            self.db.add_sample(summary)
 
         self._set_status(self._live_text(now, m), _ICON_FOR_STATE[ev.status])
         return ev
+
+    def _event(self, kind: str, detail: str | None = None) -> None:
+        if self.db is not None:
+            self.db.add_event(kind, detail)
 
     def _handle_commands(self, now: float) -> None:
         while True:
@@ -251,6 +331,7 @@ class App:
                 self.rules.reset()
                 self.sitting.reset()
                 self.smoother.reset()
+                self._event("pause", None if minutes is None else f"{minutes:g}")
                 self.tray.refresh()
             elif cmd == "resume":
                 self._resume()
@@ -270,11 +351,83 @@ class App:
                     self.zones = calibration.load_zones(self.cfg.zones)
                     self.rules.reset()
                     self.tray.refresh()
+            elif cmd == "camera":
+                (index,) = args
+                if index != self.cfg.camera.index:
+                    self.cfg.camera.index = index
+                    self._save_config()
+                    self._close_camera()
+                    self._next_camera_try = 0.0
+                    self.notifier.send(
+                        "เปลี่ยนกล้องแล้ว",
+                        f"ใช้กล้อง {index} ถ้าตำแหน่งกล้องเปลี่ยน ควร Calibrate ใหม่",
+                    )
+                    self.tray.refresh()
+            elif cmd == "recording":
+                if self.recorder is None:
+                    self._start_recording()
+                else:
+                    self._stop_recording()
+                self.tray.refresh()
 
     def _resume(self) -> None:
+        if self.paused:
+            self._event("resume")
         self.paused = False
         self._pause_until = None
         self.tray.refresh()
+
+    # ---------------------------------------------------------------- recording
+
+    def _start_recording(self) -> None:
+        try:
+            self.recorder = storage.SessionRecorder()
+        except OSError:
+            log.exception("cannot start session recording")
+            return
+        self.recording = True
+        log.info("recording metrics to %s", self.recorder.path)
+        self.notifier.send("เริ่มบันทึก session", f"เก็บเฉพาะตัวเลข ไม่มีภาพ\n{self.recorder.path}")
+
+    def _stop_recording(self) -> None:
+        self.recording = False
+        if getattr(self, "recorder", None) is not None:
+            self.recorder.close()
+            log.info("recording saved: %s", self.recorder.path)
+            self.recorder = None
+
+    # ------------------------------------------------------------ stats/zones
+
+    def _refresh_stats(self) -> None:
+        if self.db is None:
+            self._stats_lines = ["ปิดการเก็บข้อมูลไว้ใน config"]
+            return
+        try:
+            self._stats_lines = storage.format_stats(self.db.day_stats(*storage.day_bounds()))
+        except Exception:
+            log.exception("cannot compute stats")
+
+    def _check_zone_usage(self, now: float) -> None:
+        if self.db is None or now - self._last_zone_tip < ZONE_WINDOW_S:
+            return
+        end = time.time()
+        start = end - ZONE_WINDOW_S
+        if self.db.present_seconds(start, end) < ZONE_MIN_PRESENT_S:
+            return
+        share = self.db.zone_share(start, end)
+        side = {z: s for z, s in share.items() if z != calibration.MAIN}
+        if not side:
+            return
+        zone, frac = max(side.items(), key=lambda kv: kv[1])
+        if frac <= ZONE_SIDE_SHARE:
+            return
+        self._last_zone_tip = now
+        label = calibration.ZONE_LABELS.get(zone, zone)
+        self.notifier.send(
+            f"ชั่วโมงที่ผ่านมามอง{label} {frac:.0%}",
+            f"ใช้{label}มากกว่าจอหลัก ลองย้าย{label}มาไว้ตรงหน้า แล้ว Calibrate ใหม่",
+        )
+        self._event("zone_tip", zone)
 
     # ------------------------------------------------------------- calibration
 
@@ -310,6 +463,7 @@ class App:
         self.zones = calibration.load_zones(self.cfg.zones)
         self.rules.reset()
         self.tray.refresh()
+        self._event("calibrate", cal.zone)
         log.info("calibrated %s: %s", cal.zone, self.cfg.zones[cal.zone])
         self.notifier.send("จำแล้ว!", f"Meerkat จำท่านั่งดีตอนมอง{label}ไว้แล้ว")
 
@@ -345,6 +499,7 @@ class App:
         self.rules.reset()
         self.smoother = Smoother(new.camera.smoothing_s)
         self.notifier.enabled = new.alerts.notifications
+        self.aggregator.period_s = new.storage.sample_period_s
         self._apply_sitting_config()
         log.info("config reloaded")
         return camera_changed
@@ -385,6 +540,8 @@ class App:
         bad = [f"{r}:{ev.states[r].name}" for r in RULE_ORDER if ev.states.get(r, State.OK)]
         if bad:
             lines.append(" ".join(bad))
+        if self.recording:
+            lines.append("REC metrics (numbers only)")
         if self._cal is not None:
             now = time.monotonic()
             if now < self._cal.start_at:

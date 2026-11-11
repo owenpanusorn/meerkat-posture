@@ -34,7 +34,9 @@ class Landmarks:
 
 
 class Detector:
-    def __init__(self, models_dir: Path | str = DEFAULT_MODELS_DIR) -> None:
+    def __init__(
+        self, models_dir: Path | str = DEFAULT_MODELS_DIR, min_confidence: float = 0.5
+    ) -> None:
         import mediapipe as mp
         from mediapipe.tasks.python import BaseOptions, vision
 
@@ -54,6 +56,8 @@ class Detector:
                 base_options=BaseOptions(model_asset_path=str(face_path)),
                 running_mode=video,
                 num_faces=1,
+                min_face_detection_confidence=min_confidence,
+                min_face_presence_confidence=min_confidence,
                 output_facial_transformation_matrixes=True,
             )
         )
@@ -62,6 +66,8 @@ class Detector:
                 base_options=BaseOptions(model_asset_path=str(pose_path)),
                 running_mode=video,
                 num_poses=1,
+                min_pose_detection_confidence=min_confidence,
+                min_pose_presence_confidence=min_confidence,
             )
         )
         self._last_ts = -1

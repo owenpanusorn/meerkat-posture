@@ -30,6 +30,18 @@ Settings live in `config.toml` in your user config folder (`%APPDATA%\meerkat` o
 `~/Library/Application Support/meerkat` on macOS, `~/.config/meerkat` on Linux). Edits are
 picked up within a few seconds.
 
+## Data (numbers only)
+
+- `meerkat.sqlite` (same folder): a 10-second summary of the metrics plus events (alerts,
+  stand-ups, reminders). It feeds "today's stats" in the tray menu. Set
+  `[storage] enabled = false` to turn it off.
+- "Record session" in the tray menu writes per-frame metrics to `sessions/*.csv`. No images.
+  Re-run the rules on a recording to try other thresholds:
+
+  ```sh
+  uv run python -m meerkat --replay path/to/session.csv [--config other.toml]
+  ```
+
 See [PLAN.md](PLAN.md) for the roadmap.
 
 License: MIT

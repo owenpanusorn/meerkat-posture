@@ -22,6 +22,13 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--camera", type=int, default=None, help="camera index for --debug")
     parser.add_argument("--fps", type=float, default=None, help="frames per second for --debug")
     parser.add_argument("--config", type=Path, default=None, help="path to config.toml")
+    parser.add_argument(
+        "--replay",
+        type=Path,
+        default=None,
+        metavar="CSV",
+        help="re-run the rules on a recorded session (numbers only) and print the alerts",
+    )
     parser.add_argument("--version", action="version", version=f"meerkat {__version__}")
     return parser.parse_args(argv)
 
@@ -31,6 +38,18 @@ def main(argv: list[str] | None = None) -> int:
     logging.basicConfig(
         level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s"
     )
+
+    if args.replay:
+        from meerkat import config, replay, storage
+
+        try:
+            samples = storage.read_session(args.replay)
+        except (OSError, ValueError) as e:
+            print(f"error: {e}")
+            return 2
+        events = replay.replay(samples, config.load(args.config))
+        print(replay.report(events))
+        return 0
 
     if args.debug:
         from meerkat import config, debug_view

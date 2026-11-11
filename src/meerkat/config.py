@@ -37,6 +37,17 @@ class CameraConfig:
     index: int = 0
     fps: float = 5.0
     smoothing_s: float = 1.5
+    # Frames darker than this mean gray level (0-255) are skipped, not judged.
+    min_brightness: float = 40.0
+    # MediaPipe detection/presence confidence; higher = fewer shaky detections.
+    min_confidence: float = 0.6
+
+
+@dataclass
+class StorageConfig:
+    enabled: bool = True  # numbers only: metrics summaries + events in SQLite
+    sample_period_s: float = 10.0
+    record_sessions: bool = False  # per-frame metrics to CSV for replay (no images)
 
 
 @dataclass
@@ -51,7 +62,7 @@ class AlertConfig:
 @dataclass
 class SittingConfig:
     break_after_min: float = 30.0
-    repeat_min: float = 10.0
+    repeat_min: float = 15.0
     away_s: float = 60.0
     snooze_min: float = 10.0
 
@@ -83,6 +94,7 @@ class Config:
     camera: CameraConfig = field(default_factory=CameraConfig)
     alerts: AlertConfig = field(default_factory=AlertConfig)
     sitting: SittingConfig = field(default_factory=SittingConfig)
+    storage: StorageConfig = field(default_factory=StorageConfig)
     rules: dict[str, RuleConfig] = field(default_factory=default_rules)
     # Calibrated baselines: zone name -> metric name -> value.
     zones: dict[str, dict[str, float]] = field(default_factory=dict)
@@ -96,6 +108,7 @@ class Config:
         _merge(cfg.camera, data.get("camera", {}))
         _merge(cfg.alerts, data.get("alerts", {}))
         _merge(cfg.sitting, data.get("sitting", {}))
+        _merge(cfg.storage, data.get("storage", {}))
         for name, values in data.get("rules", {}).items():
             if name in cfg.rules and isinstance(values, dict):
                 _merge(cfg.rules[name], values)
@@ -130,8 +143,8 @@ def load(path: Path | None = None) -> Config:
     path = path or default_config_path()
     if not path.exists():
         return Config()
-    with path.open("rb") as f:
-        return Config.from_dict(tomllib.load(f))
+    # utf-8-sig: tolerate the BOM some Windows editors add.
+    return Config.from_dict(tomllib.loads(path.read_text(encoding="utf-8-sig")))
 
 
 def save(cfg: Config, path: Path | None = None) -> Path:

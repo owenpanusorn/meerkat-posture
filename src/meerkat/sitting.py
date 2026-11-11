@@ -24,6 +24,11 @@ class SittingTimer:
         self._last_reminder: float | None = None
         self._snooze_until = 0.0
 
+    @property
+    def active(self) -> bool:
+        """True while a sitting session is being counted."""
+        return self._start is not None
+
     def sitting_s(self, t: float) -> float:
         return 0.0 if self._start is None else t - self._start
 
