@@ -22,33 +22,53 @@ _BG = {
     "red": (208, 48, 48),
     "sleep": (130, 130, 140),
 }
-_FUR = (222, 190, 140)
-_DARK = (60, 42, 30)
 
 
 def draw_icon(state: str, size: int = 64) -> Image.Image:
-    """A simple meerkat face on a status-colored disc."""
-    s = size / 64
-    img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    """The buddy's face (see ``buddy.draw_meerkat``) on a status-colored disc.
+
+    Drawn 4x larger and scaled down for smooth edges.
+    """
+    from meerkat.buddy import BLUSH, DARK, FUR, FUR_DARK, FUR_LIGHT, NOSE, OUTLINE, PATCH
+
+    ss = 4
+    k = size * ss / 64
+    img = Image.new("RGBA", (size * ss, size * ss), (0, 0, 0, 0))
     d = ImageDraw.Draw(img)
+    lw = max(1, round(1.6 * k))
 
     def box(x0, y0, x1, y1):
-        return [round(x0 * s), round(y0 * s), round(x1 * s), round(y1 * s)]
+        return [round(x0 * k), round(y0 * k), round(x1 * k), round(y1 * k)]
 
-    d.ellipse(box(1, 1, 63, 63), fill=_BG[state])
-    d.ellipse(box(14, 9, 24, 21), fill=_FUR)  # ears
-    d.ellipse(box(40, 9, 50, 21), fill=_FUR)
-    d.ellipse(box(15, 12, 49, 56), fill=_FUR)  # head
+    def oval(b, fill, outline=False):
+        d.ellipse(box(*b), fill=fill, outline=OUTLINE if outline else None, width=lw)
+
+    def dot(x, y, r, fill):
+        oval((x - r, y - r, x + r, y + r), fill)
+
+    oval((1, 1, 63, 63), _BG[state])
+    oval((7, 20, 19, 34), PATCH, outline=True)  # ears
+    oval((45, 20, 57, 34), PATCH, outline=True)
+    oval((11, 14, 53, 56), FUR, outline=True)  # head
+    oval((22, 16.5, 42, 25), FUR_DARK)  # crown
+    oval((16, 30, 48, 54.5), FUR_LIGHT)  # pale face
+    oval((16, 27, 31, 42), PATCH)  # eye patches
+    oval((33, 27, 48, 42), PATCH)
     if state == "sleep":
-        d.line(box(21, 31, 29, 31), fill=_DARK, width=max(1, round(3 * s)))
-        d.line(box(35, 31, 43, 31), fill=_DARK, width=max(1, round(3 * s)))
+        for x in (23.5, 40.5):
+            ew = max(1, round(2 * k))
+            d.arc(box(x - 4.5, 30, x + 4.5, 37), 10, 170, fill=FUR_LIGHT, width=ew)
     else:
-        d.ellipse(box(19, 25, 30, 37), fill=_DARK)  # dark eye patches
-        d.ellipse(box(34, 25, 45, 37), fill=_DARK)
-        d.ellipse(box(23, 28, 27, 32), fill=(255, 255, 255))
-        d.ellipse(box(38, 28, 42, 32), fill=(255, 255, 255))
-    d.ellipse(box(28, 43, 36, 49), fill=_DARK)  # nose
-    return img
+        for x in (23.5, 40.5):
+            dot(x, 34.5, 5, DARK)
+            dot(x - 1.6, 32.6, 1.9, (255, 255, 255))
+    oval((13, 41, 21, 46.5), BLUSH)
+    oval((43, 41, 51, 46.5), BLUSH)
+    oval((28.5, 40, 35.5, 45), NOSE)
+    mw = max(1, round(1.0 * k))
+    d.arc(box(28.5, 43.5, 32, 47.5), 10, 170, fill=DARK, width=mw)
+    d.arc(box(32, 43.5, 35.5, 47.5), 10, 170, fill=DARK, width=mw)
+    return img.resize((size, size), Image.Resampling.LANCZOS)
 
 
 def load_icon(state: str) -> Image.Image:
